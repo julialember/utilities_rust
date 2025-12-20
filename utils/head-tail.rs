@@ -28,12 +28,6 @@ impl std::fmt::Display for HeadTailError {
     }
 }
 
-impl From<std::io::Error> for HeadTailError {
-    fn from(value: std::io::Error) -> Self {
-        HeadTailError::UnopenedFile(value)
-    }
-}
-
 struct HeadTail {
     mode: bool,
     skip_empty: bool,
@@ -61,7 +55,7 @@ impl HeadTail {
                 })
                 .take(self.count)
             {
-                if let Err(e) = writeln!(self.outfile, "{}", line) {
+                if let Err(e) = self.outfile.write_all(format!("{}\n", line).as_bytes()) {
                     return Err(HeadTailError::WriteError(e));
                 };
             }
@@ -77,7 +71,7 @@ impl HeadTail {
                 buffer.push_back(line)
             }
             for line in buffer {
-                if let Err(e) = writeln!(self.outfile, "{}", line) {
+                if let Err(e) = self.outfile.write_all(format!("{}\n", line).as_bytes()) {
                     return Err(HeadTailError::WriteError(e));
                 }
             }
@@ -85,7 +79,7 @@ impl HeadTail {
         Ok(())
     }
 
-    fn new(args: Vec<String>) -> Result<HeadTail, HeadTailError> {
+    fn new(args: &Vec<String>) -> Result<HeadTail, HeadTailError> {
         let mut i = 1;
         let mut mode: bool = true;
         let mut add_mode: bool = false;
@@ -96,6 +90,7 @@ impl HeadTail {
         while i < args.len() {
             if args[i].starts_with('-') {
                 match args[i].trim() {
+                    "-" => input_name = None,
                     "-o" | "--output" | "--outfile" | "--to" => {
                         if i + 1 >= args.len() {
                             return Err(HeadTailError::NoArgument(args[i].clone()));
@@ -184,6 +179,7 @@ impl HeadTail {
         }
     }
     fn help() {
+        println!("[SEARCH IN] [WRITE OUT]\nFlags and commands:");
         println!(
             "USAGE: [ --from        | -f  | -i | --input-file  ] (default: STDINT) /PATH/TO/INPUT/FILE \\"
         );
@@ -203,7 +199,7 @@ fn main() {
     if args.len() < 2 {
         return;
     }
-    match HeadTail::new(args) {
+    match HeadTail::new(&args) {
         Ok(o) => if let Err(e) = o.run() { eprintln!("Head-Tail run error: {}", e) },
         Err(e) => eprintln!("Head-Tail error: {}", e),
     }
