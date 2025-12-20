@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, env, fmt, fs::File, io::{self, BufRead, BufReader, Read, Write}};
+use std::{collections::VecDeque, env, fmt, fs::{File, OpenOptions}, io::{self, BufRead, BufReader, Read, Write}};
 
 #[derive(Debug)]
 enum HeadTailError {
@@ -78,6 +78,7 @@ impl HeadTail {
     fn new(args: Vec<String>) -> Result<HeadTail, HeadTailError>{
         let mut i = 1;
         let mut mode: bool = true;
+        let mut add_mode: bool = false;
         let mut outfile_name: Option<&str> = None;
         let mut input_name: Option<&str> = None;
         let mut skip = false;
@@ -116,6 +117,7 @@ impl HeadTail {
                         Self::help();
                         return Err(HeadTailError::Help);
                     }
+                    "-a" | "--add-mode" | "--add" => add_mode = true,
                     _=> return Err(HeadTailError::UnexpectedArg(args[i].clone()))
                 }
             } else {
@@ -134,14 +136,15 @@ impl HeadTail {
             i+=1;
         };
         Ok(Self { mode: mode, count: count, skip_empty: skip,
-            outfile:   Self::read_out_file(outfile_name)?,
+            outfile:   Self::read_out_file(outfile_name,add_mode)?,
             inputfile: Self::read_in_file(input_name)? 
         }) 
     }
 
-    fn read_out_file(filename: Option<&str>) -> Result<Box<dyn Write>, HeadTailError> {
+    fn read_out_file(filename: Option<&str>, add_mode: bool) -> Result<Box<dyn Write>, HeadTailError> {
         match filename {
-            Some(name) => match File::create(name) {
+            Some(name) => match OpenOptions::new()
+                    .append(add_mode).write(true).create(true).truncate(!add_mode).open(name) {
                 Ok(file) => Ok(Box::new(file)),
                 Err(e) => Err(HeadTailError::UnopenedFile(e))
             }
@@ -164,6 +167,7 @@ impl HeadTail {
         println!("       [ --count-lines | -c       | --count       ] UNSIGNED NUMBER \\");
         println!("       [ --tail-mode   | -t OR -h | --head-mode   ] default: (HEAD-MODE) \\");
         println!("       [ --skip-empty  | -s       | -skip         ] default: (NON SKIP) \\");
+        println!("       [ --add-mode    | -a       | -add          ] default: (NON ADD) \\");
         println!("       [ --help        | -he      | --help-mode   ]: help cmmand \\");
     }
 }
