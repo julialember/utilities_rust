@@ -42,17 +42,8 @@ impl HeadTail {
         if self.mode {
             for line in reader
                 .lines()
-                .filter_map(|x| {
-                    if let Ok(l) = x {
-                        if self.skip_empty && l.is_empty() {
-                            None
-                        } else {
-                            Some(l)
-                        }
-                    } else {
-                        None
-                    }
-                })
+                .filter_map(Result::ok) 
+                .filter(|l| !(self.skip_empty && l.is_empty()))
                 .take(self.count)
             {
                 if let Err(e) = self.outfile.write_all(format!("{}\n", line).as_bytes()) {

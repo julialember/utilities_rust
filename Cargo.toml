@@ -5,7 +5,10 @@ edition = "2024"
 
 [dependencies]
 
+[[bin]]
+name="grep"
+path="utils/grep.rs"
 
 [[bin]]
-name="h"
+name="head"
 path="utils/head-tail.rs"
