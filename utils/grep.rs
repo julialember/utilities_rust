@@ -53,7 +53,7 @@ impl Grep {
                     if (self.ignore_case && line.to_lowercase().contains(&self.pattern))
                             || (!self.ignore_case && line.contains(&self.pattern)) {
                         let line = if self.line_number {format!("{}. {}\n", numero, line)} 
-                            else {format!("{}\n", line)};
+                            else {line};
                         if let Err(e) = self.outfile.write_all(line.as_bytes()) {
                             return Err(GrepError::WriteError(e));
                         }
@@ -72,17 +72,16 @@ impl Grep {
                         if self.count {line_count+=1} 
                         else if let Err(e) = write!(self.outfile, "{}", 
                             if self.line_number {format!("{}{}", line_number, buffer)} 
-                            else {format!("{}", buffer)}) {
+                            else { buffer.to_owned()}) {
                             return Err(GrepError::WriteError(e))
                         }
                     } 
                     line_number+=1;
                     buffer.clear();
                 }
-                if self.count {
-                    if let Err(e) = writeln!(self.outfile, "{}", line_count) {
+                if self.count && 
+                    let Err(e) = writeln!(self.outfile, "{}", line_count) {
                         return Err(GrepError::WriteError(e)) 
-                    }
                 }
             }
         }
@@ -196,7 +195,7 @@ impl Grep {
         println!(
             "       [ --output      | -o  |-to |               ] (default: STDOUT) /PATH/TO/OUTPUT/FILE \\"
         );
-        println!("       [--pattern     | -p        | --pat         ]: NECESSARILY PART \\");
+        println!("       [--pattern      | -p        | --pat         ]: NECESSARILY PART \\");
         println!("       [ --count-lines | -c       | --count       ] default: (NON COUNT) \\");
         println!("       [ --line-number | -l       | -line         ] default: (NON NUMBER) \\");
         println!("       [ --ignore-case | -i       | -ignore       ] default: (NON IGNORE) \\");
