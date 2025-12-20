@@ -96,7 +96,7 @@ impl HeadTail {
         while i < args.len() {
             if args[i].starts_with('-') {
                 match args[i].trim() {
-                    "-o" | "--output" | "--outfile" => {
+                    "-o" | "--output" | "--outfile" | "--to" => {
                         if i + 1 >= args.len() {
                             return Err(HeadTailError::NoArgument(args[i].clone()));
                         } else {
@@ -188,7 +188,7 @@ impl HeadTail {
             "USAGE: [ --from        | -f  | -i | --input-file  ] (default: STDINT) /PATH/TO/INPUT/FILE \\"
         );
         println!(
-            "       [ --output      | -o  |-to | --help-mode   ] (default: STDOUT) /PATH/TO/OUTPUT/FILE \\"
+            "       [ --output      | -o  |-to |               ] (default: STDOUT) /PATH/TO/OUTPUT/FILE \\"
         );
         println!("       [ --count-lines | -c       | --count       ] UNSIGNED NUMBER \\");
         println!("       [ --tail-mode   | -t OR -h | --head-mode   ] default: (HEAD-MODE) \\");
