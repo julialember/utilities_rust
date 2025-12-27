@@ -1,9 +1,13 @@
 use std::{fmt, io};
 
 pub trait Command<'a, E> {
-    fn help() -> ();
-    fn run(self) -> Result<(), CommandError<'a, E>>;
-    fn new(vec: Vec<&'a str>) -> Result<Self, CommandError<'a, E>> where Self: Sized;
+    fn help() -> () where Self: Sized;
+    fn run(self: Box<Self>) -> Result<(), CommandError<'a, E>>;
+}
+
+pub trait CommandBuild<'a, E> {
+    fn new(vec: Vec<&'a str>) -> Result<Box<dyn Command<'a, E> + 'a>, CommandError<'a, E>>
+        where Self: Sized;
 }
 
 #[derive(Debug)]

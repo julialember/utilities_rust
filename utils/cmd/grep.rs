@@ -1,7 +1,8 @@
 use std::{fmt, fs::{File, OpenOptions}, io::{stdin, BufRead, BufReader, Write}};
 
+
 use super::command::{
-    Command, CommandError
+    Command, CommandError, CommandBuild
 };
 
 pub struct Grep{
@@ -13,8 +14,81 @@ pub struct Grep{
     line_number: bool,
 }
 
+impl<'a> CommandBuild<'a, GrepError> for Grep {
+fn new(args: Vec<&'a str>) -> Result<Box<dyn Command<'a, GrepError>>, CommandError<'a, GrepError>> {
+        let mut i = 1;
+        let mut add_mode: bool = false;
+        let mut pattern: Option<&str> = None;
+        let mut outfile_name: Option<&str> = None;
+        let mut input_name: Option<&str> = None;
+        let mut ignore_case = false;
+        let mut line_number = false;
+        let mut count = false;
+        while i < args.len() {
+            if args[i].starts_with('-') {
+                match args[i].trim() {
+                    "-" => input_name = None,
+                    "-o" | "--output" | "--outfile" | "--to" => {
+                        if i + 1 >= args.len() {
+                            return Err(CommandError::NoArgument(args[i]))
+                        } else {
+                            i += 1;
+                            outfile_name = Some(&args[i]);
+                        }
+                    }
+                    "-in" | "--input-file" | "-f" | "--from" => {
+                        if i + 1 >= args.len() {
+                            return Err(CommandError::NoArgument(args[i]));
+                        } else {
+                            i += 1;
+                            input_name = Some(&args[i])
+                        }
+                    }
+                    "-p" | "--pattern" | "--pat"  => {
+                        if i + 1 >= args.len() {
+                            return Err(CommandError::NoArgument(args[i]));
+                        } else {
+                            i += 1;
+                            pattern = Some(&args[i])
+                        }
+                    }
+                    "-c" | "--count" | "--count-lines" => count = true,
+                    "-he" | "--help" | "--help-mode" => {
+                        Self::help();
+                        return Err(CommandError::Help);
+                    }
+                    "-a" | "--add-mode" | "--add" => add_mode = true,
+                    "-l" | "--line" | "--line-number" => line_number = true,
+                    "-i" | "--ignore-case" | "--ignore" => ignore_case = true,
+                    _ => return Err(CommandError::UnexpectedArg(args[i])),
+                }
+            }
+            else if pattern.is_none() {
+                pattern = Some(&args[i]);
+            } 
+            else if input_name.is_none() {
+                input_name = Some(&args[i])
+            }             else {
+                outfile_name = Some(&args[i])
+            } 
+            i += 1;
+        }
+        match pattern {
+            None => Err(CommandError::Other("grep", GrepError::NoPattern)),
+            Some(pattern) => Ok(Box::new(Self {
+                count,
+                pattern: pattern.to_owned(),
+                line_number,
+                ignore_case,
+                outfile: Self::read_out_file(outfile_name, add_mode)?,
+                inputfile: Self::read_in_file(input_name)?,
+            }
+        ))}
+    }
+}
+
 impl<'a> Command<'a, GrepError> for Grep {
-    fn run(mut self) -> Result<(), CommandError<'a, GrepError>> {
+    fn run(mut self: Box<Self>) -> Result<(), CommandError<'a, GrepError>> {
         if self.ignore_case {
             self.pattern = self.pattern.to_lowercase()
         }
@@ -76,76 +150,7 @@ impl<'a> Command<'a, GrepError> for Grep {
         println!("       [ --help        | -he      | --help-mode   ]: help cmmand \\");
     }
 
-    fn new(args: Vec<&'a str>) -> Result<Self, CommandError<'a, GrepError>> {
-        let mut i = 1;
-        let mut add_mode: bool = false;
-        let mut pattern: Option<&str> = None;
-        let mut outfile_name: Option<&str> = None;
-        let mut input_name: Option<&str> = None;
-        let mut ignore_case = false;
-        let mut line_number = false;
-        let mut count = false;
-        while i < args.len() {
-            if args[i].starts_with('-') {
-                match args[i].trim() {
-                    "-" => input_name = None,
-                    "-o" | "--output" | "--outfile" | "--to" => {
-                        if i + 1 >= args.len() {
-                            return Err(CommandError::NoArgument(args[i]))
-                        } else {
-                            i += 1;
-                            outfile_name = Some(&args[i]);
-                        }
-                    }
-                    "-in" | "--input-file" | "-f" | "--from" => {
-                        if i + 1 >= args.len() {
-                            return Err(CommandError::NoArgument(args[i]));
-                        } else {
-                            i += 1;
-                            input_name = Some(&args[i])
-                        }
-                    }
-                    "-p" | "--pattern" | "--pat"  => {
-                        if i + 1 >= args.len() {
-                            return Err(CommandError::NoArgument(args[i]));
-                        } else {
-                            i += 1;
-                            pattern = Some(&args[i])
-                        }
-                    }
-                    "-c" | "--count" | "--count-lines" => count = true,
-                    "-he" | "--help" | "--help-mode" => {
-                        Self::help();
-                        return Err(CommandError::Help);
-                    }
-                    "-a" | "--add-mode" | "--add" => add_mode = true,
-                    "-l" | "--line" | "--line-number" => line_number = true,
-                    "-i" | "--ignore-case" | "--ignore" => ignore_case = true,
-                    _ => return Err(CommandError::UnexpectedArg(args[i])),
-                }
-            }
-            else if pattern.is_none() {
-                pattern = Some(&args[i]);
-            } 
-            else if input_name.is_none() {
-                input_name = Some(&args[i])
-            }             else {
-                outfile_name = Some(&args[i])
-            } 
-            i += 1;
-        }
-        match pattern {
-            None => Err(CommandError::Other("grep", GrepError::NoPattern)),
-            Some(pattern) => Ok(Self {
-                count,
-                pattern: pattern.to_owned(),
-                line_number,
-                ignore_case,
-                outfile: Self::read_out_file(outfile_name, add_mode)?,
-                inputfile: Self::read_in_file(input_name)?,
-            }
-        )}
-    }
+    
 }
     
 #[derive(Debug)]
