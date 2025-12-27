@@ -28,20 +28,27 @@ fn new(args: Vec<&'a str>) -> Result<Box<dyn Command<'a, GrepError>>, CommandErr
             if args[i].starts_with('-') {
                 match args[i].trim() {
                     "-" => input_name = None,
-                    "-o" | "--output" | "--outfile" | "--to" => {
+                    ">" | "-o" | "--output" | "--outfile" | "--to" => {
                         if i + 1 >= args.len() {
                             return Err(CommandError::NoArgument(args[i]))
                         } else {
                             i += 1;
-                            outfile_name = Some(&args[i]);
+                            outfile_name = Some(args[i]);
                         }
                     }
+                    ">>" => if i+1 >= args.len() {
+                            return Err(CommandError::NoArgument(args[i]))
+                        } else {
+                            i+=1;
+                            add_mode = true;
+                            outfile_name = Some(args[i]);
+                        }
                     "-in" | "--input-file" | "-f" | "--from" => {
                         if i + 1 >= args.len() {
                             return Err(CommandError::NoArgument(args[i]));
                         } else {
                             i += 1;
-                            input_name = Some(&args[i])
+                            input_name = Some(args[i])
                         }
                     }
                     "-p" | "--pattern" | "--pat"  => {
@@ -58,7 +65,7 @@ fn new(args: Vec<&'a str>) -> Result<Box<dyn Command<'a, GrepError>>, CommandErr
                         return Err(CommandError::Help);
                     }
                     "-a" | "--add-mode" | "--add" => add_mode = true,
-                    "-l" | "--line" | "--line-number" => line_number = true,
+                    "-n" | "-ln"       | "--line-number" => line_number = true,
                     "-i" | "--ignore-case" | "--ignore" => ignore_case = true,
                     _ => return Err(CommandError::UnexpectedArg(args[i])),
                 }
@@ -145,7 +152,7 @@ impl<'a> Command<'a, GrepError> for Grep {
         println!("       [ --output      | -o  |-to |               ] (default: STDOUT) /PATH/TO/OUTPUT/FILE \\");
         println!("       [ --pattern     | -p       | --pat         ]: NECESSARILY PART \\");
         println!("       [ --count-lines | -c       | --count       ] default: (NON COUNT) \\");
-        println!("       [ --line-number | -l       | -line         ] default: (NON NUMBER) \\");
+        println!("       [ --line-number | -n       | -ln           ] default: (NON NUMBER) \\");
         println!("       [ --ignore-case | -i       | -ignore       ] default: (NON IGNORE) \\");
         println!("       [ --help        | -he      | --help-mode   ]: help cmmand \\");
     }
@@ -190,7 +197,7 @@ impl Grep {
                 .open(name)
             {
                 Ok(file) => Ok(Box::new(file)),
-                Err(e) => Err(CommandError::UnopenedFile(e)),
+                Err(e) => Err(CommandError::UnopenedFile(name,e)),
             },
             None => Ok(Box::new(std::io::stdout())),
         }
@@ -200,7 +207,7 @@ impl Grep {
         match filename {
             Some(name) => match File::open(name) {
                 Ok(file) => Ok(Some(file)),
-                Err(e) => Err(CommandError::UnopenedFile(e)),
+                Err(e) => Err(CommandError::UnopenedFile(name,e)),
             },
             None => Ok(None),
         }

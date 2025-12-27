@@ -14,7 +14,7 @@ pub trait CommandBuild<'a, E> {
 pub enum CommandError<'a, E> {
     UnexpectedArg(&'a str),
     NoArgument(&'a str),
-    UnopenedFile(io::Error),
+    UnopenedFile(&'a str, io::Error),
     WriteError(io::Error),
     Help,
     Other(&'a str, E),
@@ -23,12 +23,12 @@ pub enum CommandError<'a, E> {
 impl<'a, E: fmt::Display> fmt::Display for CommandError<'a, E>{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::UnexpectedArg(s) => writeln!(f, "shu: unexpected arg: {}", s),
-            Self::UnopenedFile(s) => writeln!(f, "shu: can't open the file: {}", s),
-            Self::NoArgument(s) => writeln!(f, "shu: no argument after: {}", s),
-            Self::WriteError(s) => writeln!(f, "shu: error with write into file: {}", s),
-            Self::Help => writeln!(f, "shu: Just helping"),
-            Self::Other(name, e) => writeln!(f, "shu: {}: {}", name, e),
+            Self::UnexpectedArg(s) => write!(f, "shu: unexpected arg: {}", s),
+            Self::UnopenedFile(n, s) => write!(f, "shu: can't open the file ({}): {}", n, s),
+            Self::NoArgument(s) => write!(f, "shu: no argument after: {}", s),
+            Self::WriteError(s) => write!(f, "shu: error with write into file: {}", s),
+            Self::Help => write!(f, "shu: Just helping"),
+            Self::Other(name, e) => write!(f, "shu: {}: {}", name, e),
         }
     }
 }    
