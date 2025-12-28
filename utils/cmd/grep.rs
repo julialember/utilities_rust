@@ -99,7 +99,7 @@ fn new(args: Vec<&'a str>) -> Result<Box<dyn Command<'a, GrepError> + 'a>, Comma
 }
 
 impl<'a> Command<'a, GrepError> for Grep {
-    fn run(mut self: Box<Self>) -> Result<(), CommandError<'a, GrepError>> {
+    fn run(mut self: Box<Self>) -> Result<bool, CommandError<'a, GrepError>> {
         if self.ignore_case {
             self.pattern = self.pattern.to_lowercase()
         }
@@ -110,7 +110,7 @@ impl<'a> Command<'a, GrepError> for Grep {
                     writeln!(self.outfile, "{}",  
                         buffer.lines().flatten().filter(|line| 
                                 Self::match_pattern(line, &self.pattern, self.ignore_case)).count())?;
-                    return Ok(())
+                    return Ok(true)
                 } 
                 for (numero, line) in buffer.lines().flatten().enumerate() {
                     if Self::match_pattern(&line, &self.pattern, self.ignore_case){
@@ -140,7 +140,7 @@ impl<'a> Command<'a, GrepError> for Grep {
                 }
             }
         }
-        Ok(())
+        Ok(true)
     }
  
 fn help() {

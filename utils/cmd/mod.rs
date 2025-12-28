@@ -18,10 +18,13 @@ fn run<'a, E, B>(vec: Vec<&'a str>) -> bool
 {
     match B::new(vec) {
         Ok(command) => 
-            if let Err(e) = command.run() {
-                eprintln!("{}", e);
-                false
-            } else {true}
+            match command.run() {
+                Err(e) => {
+                    eprintln!("{}", e); 
+                    false
+                }
+                Ok(code) => code
+            }
         Err(e) => {
             eprintln!("{}", e);
             false
@@ -30,7 +33,7 @@ fn run<'a, E, B>(vec: Vec<&'a str>) -> bool
 }
 
 pub fn todo(command: &str) -> bool {
-    let vec: Vec<&str> = command.trim().split_whitespace().collect();
+    let vec: Vec<&str> = command.split_whitespace().collect();
     match vec[0] {
         "grep" => return run::<'_, GrepError, Grep>(vec),
         "cat" => return run::<'_, CatError, Cat>(vec),

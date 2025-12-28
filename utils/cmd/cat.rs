@@ -84,7 +84,8 @@ fn new(args: Vec<&'a str>) -> Result<Box<dyn Command<'a, CatError> + 'a>, Comman
 }
 
 impl<'a> Command<'a, CatError> for Cat<'a> {
-    fn run(mut self: Box<Self>) -> Result<(), CommandError<'a, CatError>> {
+    fn run(mut self: Box<Self>) -> Result<bool, CommandError<'a, CatError>> {
+        let mut exit_code = true;
         if self.inputfiles.len() == 0 {
             self.inputfiles.push("-");
         } ;
@@ -116,13 +117,15 @@ impl<'a> Command<'a, CatError> for Cat<'a> {
                                 writeln!(self.outfile, "{}{}", line, if self.show_end {"$"} else {""})?;
                             } 
                         },
-                        Err(e) =>
-                            writeln!(self.outfile, "shu: error with file ({}): {}", file, e)?,
+                        Err(e) => {
+                            writeln!(self.outfile, "{}", e)?;
+                            exit_code = false; 
+                        }
                     }   
                 }
             }
         }
-        Ok(())
+        Ok(exit_code)
     }
  
 fn help() {

@@ -2,7 +2,7 @@ use std::{fmt, io};
 
 pub trait Command<'a, E> {
     fn help() -> () where Self: Sized;
-    fn run(self: Box<Self>) -> Result<(), CommandError<'a, E>>;
+    fn run(self: Box<Self>) -> Result<bool, CommandError<'a, E>>;
 }
 
 pub trait CommandBuild<'a, E> {

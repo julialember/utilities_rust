@@ -30,7 +30,7 @@ pub struct HeadTail {
 }
 
 impl<'a> Command<'a, HeadTailError<'a>> for HeadTail {
-    fn run(mut self: Box<Self>) -> Result<(), CommandError<'a, HeadTailError<'a>>> {
+    fn run(mut self: Box<Self>) -> Result<bool, CommandError<'a, HeadTailError<'a>>> {
         let reader = BufReader::new(self.inputfile);
         if self.mode {
             for line in reader
@@ -56,7 +56,7 @@ impl<'a> Command<'a, HeadTailError<'a>> for HeadTail {
                 self.outfile.write_all(format!("{}\n", line).as_bytes())?;
             }
         }
-        Ok(())
+        Ok(true)
     }
     
     fn help() {
