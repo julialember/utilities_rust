@@ -1,4 +1,8 @@
-use std::{fmt, fs::{File, OpenOptions}, io::{stdin, BufRead, BufReader, Write}};
+use std::{
+    fmt, 
+    fs::{File, OpenOptions}, 
+    io::{stdin, BufRead, BufReader, Write}
+};
 
 
 use super::command::{
@@ -15,7 +19,7 @@ pub struct Grep{
 }
 
 impl<'a> CommandBuild<'a, GrepError> for Grep {
-fn new(args: Vec<&'a str>) -> Result<Box<dyn Command<'a, GrepError>>, CommandError<'a, GrepError>> {
+fn new(args: Vec<&'a str>) -> Result<Box<dyn Command<'a, GrepError> + 'a>, CommandError<'a, GrepError>> {
         let mut i = 1;
         let mut add_mode: bool = false;
         let mut pattern: Option<&str> = None;
@@ -25,7 +29,7 @@ fn new(args: Vec<&'a str>) -> Result<Box<dyn Command<'a, GrepError>>, CommandErr
         let mut line_number = false;
         let mut count = false;
         while i < args.len() {
-            if args[i].starts_with('-') {
+            if args[i].starts_with('-') || args[i].starts_with('>') {
                 match args[i].trim() {
                     "-" => input_name = None,
                     ">" | "-o" | "--output" | "--outfile" | "--to" => {
@@ -146,16 +150,30 @@ impl<'a> Command<'a, GrepError> for Grep {
         Ok(())
     }
  
-    fn help() {
-        println!("[SEARCH IN] [PATTERN] [WRITE OUT]\nFlags and commands:");
-        println!("USAGE: [ --from        | -f  |-in | --input-file  ] (default: STDIN) /PATH/TO/INPUT/FILE \\");
-        println!("       [ --output      | -o  |-to |               ] (default: STDOUT) /PATH/TO/OUTPUT/FILE \\");
-        println!("       [ --pattern     | -p       | --pat         ]: NECESSARILY PART \\");
-        println!("       [ --count-lines | -c       | --count       ] default: (NON COUNT) \\");
-        println!("       [ --line-number | -n       | -ln           ] default: (NON NUMBER) \\");
-        println!("       [ --ignore-case | -i       | -ignore       ] default: (NON IGNORE) \\");
-        println!("       [ --help        | -he      | --help-mode   ]: help cmmand \\");
-    }
+fn help() {
+    println!("Search for PATTERN in each FILE or standard input.");
+    println!();
+    println!("USAGE:");
+    println!("  grep [OPTIONS] PATTERN [FILE]...");
+    println!();
+    println!("If FILE is '-' or omitted, read from standard input.");
+    println!();
+    println!("OPTIONS:");
+    println!("  -i, --ignore-case           ignore case distinctions");
+    println!("  -n, --line-number           print line number with output lines");
+    println!("  -c, --count                 print only a count of matching lines");
+    println!("  -f, --from FILE             search PATTERN in FILE");
+    println!("   >, -o,--output FILE        write to FILE instead of stdout");
+    println!("   >>                         append to FILE instead of stdout");
+    println!("  -he, --help                 display this help and exit");
+    println!("  -a, --add-mode,             did not truncate the output file ");
+    println!();
+    println!("EXAMPLES:");
+    println!("  grep error log.txt          Search 'error' in log.txt");
+    println!("  grep -i warning *.log       Case-insensitive search in all .log files");
+    println!("  grep -n pattern file        Show matching lines with numbers");
+    println!("  grep -c error file          Count lines containing 'error'");
+}
 
     
 }

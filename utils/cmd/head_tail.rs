@@ -1,34 +1,27 @@
 use std::{
     collections::VecDeque,
-    env, fmt,
+    fmt,
     fs::{File, OpenOptions},
-    io::{self, BufRead, BufReader, Read, Write},
+    io::{BufRead, BufReader, Read, Write},
 };
 
+
 #[derive(Debug)]
-enum HeadTailError {
-    UnexpectedArg(String),
-    NoArgument(String),
-    UnopenedFile(io::Error),
-    WriteError(io::Error),
-    ParseError(String),
-    Help,
+pub enum HeadTailError<'a> {
+    ParseError(&'a str),
 }
 
-impl std::fmt::Display for HeadTailError {
+use super::command::{Command, CommandBuild, CommandError};
+
+impl std::fmt::Display for HeadTailError<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::UnexpectedArg(s) => writeln!(f, "unexpected arg: {}", s),
-            Self::UnopenedFile(s) => writeln!(f, "can't open the file: {}", s),
-            Self::NoArgument(s) => writeln!(f, "no argument after: {}", s),
-            Self::ParseError(s) => writeln!(f, "can't parse argument: {}", s),
-            Self::WriteError(s) => writeln!(f, "error with write into file: {}", s),
-            Self::Help => writeln!(f, "message: Just helping"),
+            Self::ParseError(s) => writeln!(f, "can't parse argument: {}", s)
         }
     }
 }
 
-struct HeadTail {
+pub struct HeadTail {
     mode: bool,
     skip_empty: bool,
     count: usize,
@@ -36,8 +29,8 @@ struct HeadTail {
     inputfile: Box<dyn Read>,
 }
 
-impl HeadTail {
-    fn run(mut self) -> Result<(), HeadTailError> {
+impl<'a> Command<'a, HeadTailError<'a>> for HeadTail {
+    fn run(mut self: Box<Self>) -> Result<(), CommandError<'a, HeadTailError<'a>>> {
         let reader = BufReader::new(self.inputfile);
         if self.mode {
             for line in reader
@@ -47,7 +40,7 @@ impl HeadTail {
                 .take(self.count)
             {
                 if let Err(e) = self.outfile.write_all(format!("{}\n", line).as_bytes()) {
-                    return Err(HeadTailError::WriteError(e));
+                    return Err(CommandError::WriteError(e));
                 };
             }
         } else {
@@ -63,14 +56,45 @@ impl HeadTail {
             }
             for line in buffer {
                 if let Err(e) = self.outfile.write_all(format!("{}\n", line).as_bytes()) {
-                    return Err(HeadTailError::WriteError(e));
+                    return Err(CommandError::WriteError(e));
                 }
             }
         }
         Ok(())
     }
+    
+    fn help() {
+        println!("Display first or last lines of FILE(s) to standard output.");
+        println!();
+        println!("USAGE:");
+        println!("  head-tail [OPTIONS] [FILE]");
+        println!();
+        println!("If FILE is '-' or omitted, read from standard input.");
+        println!();
+        println!("OPTIONS:");
+        println!("  -h, --head-mode           display first lines (default mode)");
+        println!("  -t, --tail-mode           display last lines");
+        println!("  -c, --count, --count-lines N");
+        println!("                            display N lines (default: 10)");
+        println!("  -s, --skip-empty, --skip  skip empty lines");
+        println!("  -f, --from, -i, --input-file FILE");
+        println!("                            read from FILE instead of stdin");
+        println!("  -o, --output, --to, --outfile FILE");
+        println!("                            write to FILE instead of stdout");
+        println!("  -a, --add, --add-mode     append to FILE instead of overwriting (with -o)");
+        println!("  -he, --help, --help-mode  display this help and exit");
+        println!();
+        println!("EXAMPLES:");
+        println!("  head-tail -h -c 5 file.txt       Display first 5 lines of file.txt");
+        println!("  head-tail -t -c 20 < input.txt   Display last 20 lines from stdin");
+        println!("  head-tail -s -c 15 file.txt      Display first 15 non-empty lines");
+        println!("  head-tail -t -o output.txt       Display last 10 lines to output.txt");
+    }
+}
 
-    fn new(args: &Vec<String>) -> Result<HeadTail, HeadTailError> {
+impl<'a> CommandBuild<'a, HeadTailError<'a>> for HeadTail {
+    fn new(args: Vec<&'a str>) 
+        -> Result<Box<dyn Command<'a, HeadTailError<'a>> + 'a>, CommandError<'a, HeadTailError<'a>>>{
         let mut i = 1;
         let mut mode: bool = true;
         let mut add_mode: bool = false;
@@ -79,35 +103,39 @@ impl HeadTail {
         let mut skip = false;
         let mut count = 10;
         while i < args.len() {
-            if args[i].starts_with('-') {
+            if args[i].starts_with('-') || args[i].starts_with('>') {
                 match args[i].trim() {
                     "-" => input_name = None,
-                    "-o" | "--output" | "--outfile" | "--to" => {
+                    ">" | "-o" | "--output" | "--outfile" | "--to" => {
                         if i + 1 >= args.len() {
-                            return Err(HeadTailError::NoArgument(args[i].clone()));
+                            return Err(CommandError::NoArgument(args[i]));
                         } else {
                             i += 1;
-                            outfile_name = Some(&args[i]);
+                            outfile_name = Some(args[i]);
                         }
                     }
+                    ">>" => if i + 1 >= args.len() {
+                        return Err(CommandError::NoArgument(args[i]));
+                        } else {
+                            i+=1;
+                            outfile_name = Some(args[i]);
+                            add_mode=true;
+                        }
 
                     "-i" | "--input-file" | "-f" | "--from" => {
                         if i + 1 >= args.len() {
-                            return Err(HeadTailError::NoArgument(args[i].clone()));
+                            return Err(CommandError::NoArgument(args[i]));
                         } else {
                             i += 1;
-                            input_name = Some(&args[i])
+                            input_name = Some(args[i])
                         }
                     }
                     "-c" | "--count" | "--count-lines" => {
                         if i + 1 >= args.len() {
-                            return Err(HeadTailError::NoArgument(args[i].clone()));
+                            return Err(CommandError::NoArgument(args[i]));
                         } else {
                             i += 1;
-                            count = match args[i].parse::<usize>() {
-                                Ok(num) => num,
-                                Err(_) => return Err(HeadTailError::ParseError(args[i].clone())),
-                            }
+                            count = Self::parse_arg(args[i])?;      
                         }
                     }
                     "-t" | "--tail-mode" => mode = false,
@@ -115,36 +143,44 @@ impl HeadTail {
                     "-s" | "--skip-empty" | "--skip" => skip = true,
                     "-he" | "--help" | "--help-mode" => {
                         Self::help();
-                        return Err(HeadTailError::Help);
+                        return Err(CommandError::Help);
                     }
                     "-a" | "--add-mode" | "--add" => add_mode = true,
-                    _ => return Err(HeadTailError::UnexpectedArg(args[i].clone())),
+                    _ => return Err(CommandError::UnexpectedArg(args[i])),
                 }
             } else if input_name.is_none() {
-                input_name = Some(&args[i])
+                input_name = Some(args[i])
             } else if outfile_name.is_none() {
-                outfile_name = Some(&args[i])
+                outfile_name = Some(args[i])
             } else {
-                count = match args[i].parse::<usize>() {
-                    Ok(num) => num,
-                    Err(_) => return Err(HeadTailError::ParseError(args[i].clone())),
-                }
+                count = Self::parse_arg(args[i])?;
             }
             i += 1;
         }
-        Ok(Self {
+        Ok(Box::new(Self {
             mode,
             count,
             skip_empty: skip,
             outfile: Self::read_out_file(outfile_name, add_mode)?,
             inputfile: Self::read_in_file(input_name)?,
-        })
+            }))
+ 
+    }
+}
+
+impl<'a> HeadTail {
+    fn parse_arg(arg: &'a str) -> Result<usize, CommandError<'a, HeadTailError<'a>>>{
+        match arg.parse::<usize>() {
+            Ok(num) => Ok(num),
+            Err(_) => Err(CommandError
+              ::Other("head-tail", HeadTailError::ParseError(arg))),
+        }
     }
 
     fn read_out_file(
-        filename: Option<&str>,
+        filename: Option<&'a str>,
         add_mode: bool,
-    ) -> Result<Box<dyn Write>, HeadTailError> {
+    ) -> Result<Box<dyn Write>, CommandError<'a, HeadTailError<'a>>> {
         match filename {
             Some(name) => match OpenOptions::new()
                 .append(add_mode)
@@ -154,44 +190,23 @@ impl HeadTail {
                 .open(name)
             {
                 Ok(file) => Ok(Box::new(file)),
-                Err(e) => Err(HeadTailError::UnopenedFile(e)),
+                Err(e) => Err(CommandError::UnopenedFile(name, e)),
             },
             None => Ok(Box::new(std::io::stdout())),
         }
     }
 
-    fn read_in_file(filename: Option<&str>) -> Result<Box<dyn Read>, HeadTailError> {
+    fn read_in_file(
+        filename: Option<&'a str>
+        ) -> Result<Box<dyn Read>, CommandError<'a, HeadTailError<'a>>> {
         match filename {
             Some(name) => match File::open(name) {
                 Ok(file) => Ok(Box::new(file)),
-                Err(e) => Err(HeadTailError::UnopenedFile(e)),
+                Err(e) => Err(CommandError::UnopenedFile(name, e)),
             },
             None => Ok(Box::new(std::io::stdin())),
         }
     }
-    fn help() {
-        println!("[SEARCH IN] [WRITE OUT]\nFlags and commands:");
-        println!(
-            "USAGE: [ --from        | -f  | -i | --input-file  ] (default: STDINT) /PATH/TO/INPUT/FILE \\"
-        );
-        println!(
-            "       [ --output      | -o  |-to |               ] (default: STDOUT) /PATH/TO/OUTPUT/FILE \\"
-        );
-        println!("       [ --count-lines | -c       | --count       ] UNSIGNED NUMBER \\");
-        println!("       [ --tail-mode   | -t OR -h | --head-mode   ] default: (HEAD-MODE) \\");
-        println!("       [ --skip-empty  | -s       | -skip         ] default: (NON SKIP) \\");
-        println!("       [ --add-mode    | -a       | -add          ] default: (NON ADD) \\");
-        println!("       [ --help        | -he      | --help-mode   ]: help cmmand \\");
-    }
 }
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        return;
-    }
-    match HeadTail::new(&args) {
-        Ok(o) => if let Err(e) = o.run() { eprintln!("Head-Tail run error: {}", e) },
-        Err(e) => eprintln!("Head-Tail error: {}", e),
-    }
-}
+

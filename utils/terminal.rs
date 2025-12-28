@@ -23,7 +23,9 @@ fn main() -> io::Result<()> {
                 break;
             }
             "pwd" => println!("{}", now_dir.display()),
-            _     => println!("exit code: {}", if !cmd::todo(&command) {1} else {0}),
+            _     => {
+                println!("exit code: {}", if !cmd::todo(&command) {1} else {0});
+            }
         }
         command.clear();
     }

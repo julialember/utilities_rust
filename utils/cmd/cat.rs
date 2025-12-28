@@ -1,4 +1,8 @@
-use std::{fmt, fs::{File, OpenOptions}, io::{stdin, BufRead, BufReader, Write}};
+use std::{
+    fmt, 
+    fs::{File, OpenOptions}, 
+    io::{stdin, BufRead, BufReader, Write}
+};
 
 use super::command::{
     Command, CommandError, CommandBuild
@@ -90,7 +94,7 @@ impl<'a> Command<'a, CatError> for Cat<'a> {
                 "-" => {
                     let mut buffer = String::new();
                     while stdin().read_line(&mut buffer).expect("can't read line") != 0 {
-                        if self.squize_blank && buffer.is_empty() {continue;}
+                        if self.squize_blank && buffer.trim().is_empty() {continue;}
                         else if self.line_number || (self.count_non_empty && !buffer.trim().is_empty()) {
                             if let Err(e) = write!(self.outfile, "{}. ", index) {
                                 return Err(CommandError::WriteError(e));
@@ -98,7 +102,7 @@ impl<'a> Command<'a, CatError> for Cat<'a> {
                             index+=1;
                         }
                         if let Err(e) = 
-                            write!(self.outfile, "{}{}", buffer, if self.show_end {"$"} else {""}) {
+                            writeln!(self.outfile, "{}{}", buffer.trim(), if self.show_end {"$"} else {""}) {
                                     return Err(CommandError::WriteError(e))
                                 }
                             buffer.clear();
@@ -109,7 +113,7 @@ impl<'a> Command<'a, CatError> for Cat<'a> {
                         Ok(file) => {
                             let buffer = BufReader::new(file);
                             for line in buffer.lines().flatten() {
-                                if self.squize_blank && line.is_empty() {continue;}
+                                if self.squize_blank && line.trim().is_empty() {continue;}
                                 else if self.line_number || (self.count_non_empty && !line.is_empty()) {
                                     if let Err(e) = write!(self.outfile, "{}. ", index) {
                                         return Err(CommandError::WriteError(e));
@@ -133,16 +137,32 @@ impl<'a> Command<'a, CatError> for Cat<'a> {
         Ok(())
     }
  
-    fn help() {
-        println!("[SEARCH IN] [PATTERN] [WRITE OUT]\nFlags and commands:");
-        println!("USAGE: [ --from        | -f  |-in | --input-file  ] (default: STDIN) /PATH/TO/INPUT/FILE \\");
-        println!("       [ --output      | -o  |-to |               ] (default: STDOUT) /PATH/TO/OUTPUT/FILE \\");
-        println!("       [ --pattern     | -p       | --pat         ]: NECESSARILY PART \\");
-        println!("       [ --count-lines | -c       | --count       ] default: (NON COUNT) \\");
-        println!("       [ --line-number | -l       | -line         ] default: (NON NUMBER) \\");
-        println!("       [ --ignore-case | -i       | -ignore       ] default: (NON IGNORE) \\");
-        println!("       [ --help        | -he      | --help-mode   ]: help cmmand \\");
-    }
+fn help() {
+    println!("Concatenate FILE(s) to standard output.");
+    println!();
+    println!("USAGE:");
+    println!("  cat [OPTIONS] [FILE]...");
+    println!();
+    println!("If FILE is '-' or omitted, read from standard input.");
+    println!();
+    println!("OPTIONS:");
+    println!("  -n, --line-number         number all output lines");
+    println!("  -b, --non-blank           number non-empty output lines");
+    println!("  -E, --show-ends           display $ at end of each line");
+    println!("  -s, --squeeze-blank       suppress repeated empty output lines");
+    println!("  -f, --from, --input-file  specify input file (can be used multiple times)");
+    println!("  -o, --output, --to FILE   write to FILE instead of stdout");
+    println!("   >>                       append to FILE instead of stdout");
+    println!("  -a, --add-mode,           did not truncate the output file ");
+    println!("  -a, --add, --append       append to FILE instead of overwriting (with -o)");
+    println!("  -he, --help               display this help and exit");
+    println!();
+    println!("EXAMPLES:");
+    println!("  cat file.txt              Display file.txt contents");
+    println!("  cat -n file1 file2        Display files with line numbers");
+    println!("  cat -E > output.txt       Read stdin, show $ at line ends, write to file");
+    println!("  cat file1 - file2         Display file1, then stdin, then file2");
+}
 
     
 }

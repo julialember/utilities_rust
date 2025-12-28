@@ -1,10 +1,13 @@
+use std::fmt;
 mod command;
+
 mod grep;
 mod cat;
-use std::fmt;
+mod head_tail;
 
 use grep::{Grep, GrepError};
 use cat::{Cat, CatError};
+use head_tail::{HeadTail, HeadTailError};
     
 use command::CommandBuild;
 
@@ -31,6 +34,7 @@ pub fn todo(command: &str) -> bool {
     match vec[0] {
         "grep" => return run::<'_, GrepError, Grep>(vec),
         "cat" => return run::<'_, CatError, Cat>(vec),
+        "head-tail" => return run::<'_, HeadTailError, HeadTail>(vec),
         _=> {
             eprintln!("shu: unknown command: {}", vec[0]);
             return false;
