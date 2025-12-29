@@ -18,7 +18,8 @@ pub struct Cat<'a>{
 }
 
 impl<'a> CommandBuild<'a, CatError> for Cat<'a> {
-fn new(args: Vec<&'a str>, path: PathBuf) -> Result<Box<dyn Command<'a, CatError> + 'a>, CommandError<'a, CatError>> {
+fn new(args: Vec<&'a str>, path: PathBuf) 
+    -> Result<Box<dyn Command<'a, CatError> + 'a>, CommandError<'a, CatError>> {
         let mut i = 1;
         let mut add_mode: bool = false;
         let mut outfile_name: Option<&str> = None;

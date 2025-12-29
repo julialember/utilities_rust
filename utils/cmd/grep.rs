@@ -1,7 +1,7 @@
 use std::{
     fmt, 
-    fs::File, 
-    io::{self, BufRead, BufReader, Write, stdin}, path::PathBuf
+    io::{self, BufRead, BufReader, Write, stdin}, 
+    path::PathBuf
 };
 
 
@@ -11,7 +11,7 @@ use super::command::{
 
 pub struct Grep<'a> {
     pattern: String,
-    inputfile: Option<File>,
+    inputfile: Vec<Option<PathBuf>>,
     outfile: Box<dyn Write + 'a>,
     count: bool,
     ignore_case: bool,
@@ -24,14 +24,14 @@ fn new(args: Vec<&'a str>, path: PathBuf) -> Result<Box<dyn Command<'a, GrepErro
         let mut add_mode: bool = false;
         let mut pattern: Option<&str> = None;
         let mut outfile_name: Option<&str> = None;
-        let mut input_name: Option<&str> = None;
+        let mut input_names: Vec<Option<PathBuf>> = Vec::new();
         let mut ignore_case = false;
         let mut line_number = false;
         let mut count = false;
         while i < args.len() {
             if args[i].starts_with('-') || args[i].starts_with('>') {
                 match args[i].trim() {
-                    "-" => input_name = None,
+                    "-" => input_names.push(None),
                     ">" | "-o" | "--output" | "--outfile" | "--to" => {
                         if i + 1 >= args.len() {
                             return Err(CommandError::NoArgument(args[i]))
@@ -52,7 +52,7 @@ fn new(args: Vec<&'a str>, path: PathBuf) -> Result<Box<dyn Command<'a, GrepErro
                             return Err(CommandError::NoArgument(args[i]));
                         } else {
                             i += 1;
-                            input_name = Some(args[i])
+                            input_names.push(Some(path.join(args[i])))
                         }
                     }
                     "-p" | "--pattern" | "--pat"  => {
@@ -77,11 +77,9 @@ fn new(args: Vec<&'a str>, path: PathBuf) -> Result<Box<dyn Command<'a, GrepErro
             else if pattern.is_none() {
                 pattern = Some(args[i]);
             } 
-            else if input_name.is_none() {
-                input_name = Some(args[i])
-            }             else {
-                outfile_name = Some(args[i])
-            } 
+            else {
+                input_names.push(Some(path.join(args[i])))
+            }           
             i += 1;
         }
         match pattern {
@@ -96,9 +94,7 @@ fn new(args: Vec<&'a str>, path: PathBuf) -> Result<Box<dyn Command<'a, GrepErro
                         Self::read_out_file(path.join(outfile_name), add_mode)?,
                     None => Box::new(io::stdout()),
                 },
-                inputfile: if let Some(name) = input_name {
-                    Some(Self::read_in_file(path.join(name))?)
-                } else {None}
+                inputfile: input_names,
             }
         ))}
     }
@@ -109,46 +105,48 @@ impl<'a> Command<'a, GrepError> for Grep<'a> {
         if self.ignore_case {
             self.pattern = self.pattern.to_lowercase()
         }
-        match self.inputfile {
-            Some(input) => {
-                let buffer = BufReader::new(input);
-                if self.count {
-                    writeln!(self.outfile, "{}",  
-                        buffer.lines().flatten().filter(|line| 
-                                Self::match_pattern(line, &self.pattern, self.ignore_case)).count())?;
-                    return Ok(true)
-                } 
-                for (numero, line) in buffer.lines().flatten().enumerate() {
-                    if Self::match_pattern(&line, &self.pattern, self.ignore_case){
-                        let line = if self.line_number {format!("{}. {}\n", numero+1, line)} 
-                            else {format!("{}\n", line)};
-                        self.outfile.write_all(line.as_bytes())?;
+        for file in self.inputfile {
+            match file {
+                Some(input) => {
+                    let buffer 
+                        = BufReader::new(Self::read_in_file(input)?);
+                    if self.count {
+                        writeln!(self.outfile, "{}",  
+                            buffer.lines().flatten().filter(|line| 
+                                    Self::match_pattern(line, &self.pattern, self.ignore_case)).count())?;
+                        return Ok(true)
+                    } 
+                    for (numero, line) in buffer.lines().flatten().enumerate() {
+                        if Self::match_pattern(&line, &self.pattern, self.ignore_case){
+                            let line = if self.line_number {format!("{}. {}\n", numero+1, line)} 
+                                else {format!("{}\n", line)};
+                            self.outfile.write_all(line.as_bytes())?;
+                        }
                     }
                 }
-            }
-            None => {
-                let mut buffer = String::new();
-                let mut line_number = 1;
-                let mut line_count = 0;
-                while let Ok(num) = stdin().read_line(&mut buffer) {
-                    if num == 0 {break;}  
-                    if Self::match_pattern(&buffer, &self.pattern, self.ignore_case){
-                        if self.count {line_count+=1} 
-                        write!(self.outfile, "{}", 
-                            if self.line_number {format!("{}{}", line_number, buffer)} 
-                            else { format!("{}", buffer)})?;
-                    } 
-                    line_number+=1;
-                    buffer.clear();
-                }
-                if self.count {
-                    writeln!(self.outfile, "{}", line_count)?;
+                None => {
+                    let mut buffer = String::new();
+                    let mut line_number = 1;
+                    let mut line_count = 0;
+                    while let Ok(num) = stdin().read_line(&mut buffer) {
+                        if num == 0 {break;}  
+                        if Self::match_pattern(&buffer, &self.pattern, self.ignore_case){
+                            if self.count {line_count+=1} 
+                            write!(self.outfile, "{}", 
+                                if self.line_number {format!("{}{}", line_number, buffer)} 
+                                else { format!("{}", buffer)})?;
+                        } 
+                        line_number+=1;
+                        buffer.clear();
+                    }
+                    if self.count {
+                        writeln!(self.outfile, "{}", line_count)?;
+                    }
                 }
             }
         }
         Ok(true)
-    }
- 
+    } 
 fn help() {
     println!("Search for PATTERN in each FILE or standard input.");
     println!();
