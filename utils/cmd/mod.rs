@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, path::PathBuf};
 
 mod command;
 mod grep;
@@ -11,12 +11,12 @@ use head_tail::{HeadTail, HeadTailError};
     
 use command::CommandBuild;
 
-fn run<'a, E, B>(vec: Vec<&'a str>) -> bool 
+fn run<'a, E, B>(vec: Vec<&'a str>, path: PathBuf) -> bool 
     where 
         B: CommandBuild<'a, E>,
         E: fmt::Display,
 {
-    match B::new(vec) {
+    match B::new(vec, path) {
         Ok(command) => 
             match command.run() {
                 Err(e) => {
@@ -32,12 +32,12 @@ fn run<'a, E, B>(vec: Vec<&'a str>) -> bool
     }
 }
 
-pub fn todo(command: &str) -> bool {
+pub fn todo(command: &str, path: PathBuf) -> bool {
     let vec: Vec<&str> = command.split_whitespace().collect();
     match vec[0] {
-        "grep" => return run::<'_, GrepError, Grep>(vec),
-        "cat" => return run::<'_, CatError, Cat>(vec),
-        "head-tail" => return run::<'_, HeadTailError, HeadTail>(vec),
+        "grep" => return run::<'_, GrepError, Grep>(vec, path),
+        "cat" => return run::<'_, CatError, Cat>(vec, path),
+        "head-tail" => return run::<'_, HeadTailError, HeadTail>(vec, path),
         _=> {
             eprintln!("shu: unknown command: {}", vec[0]);
             return false;

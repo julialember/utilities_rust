@@ -1,7 +1,7 @@
 use std::{
     fmt, 
-    fs::{File, OpenOptions}, 
-    io::{stdin, BufRead, BufReader, Write}
+    fs::File, 
+    io::{self, BufRead, BufReader, Write, stdin}, path::PathBuf
 };
 
 
@@ -9,17 +9,17 @@ use super::command::{
     Command, CommandError, CommandBuild
 };
 
-pub struct Grep{
+pub struct Grep<'a> {
     pattern: String,
     inputfile: Option<File>,
-    outfile: Box<dyn Write>,
+    outfile: Box<dyn Write + 'a>,
     count: bool,
     ignore_case: bool,
     line_number: bool,
 }
 
-impl<'a> CommandBuild<'a, GrepError> for Grep {
-fn new(args: Vec<&'a str>) -> Result<Box<dyn Command<'a, GrepError> + 'a>, CommandError<'a, GrepError>> {
+impl<'a> CommandBuild<'a, GrepError> for Grep<'a> {
+fn new(args: Vec<&'a str>, path: PathBuf) -> Result<Box<dyn Command<'a, GrepError> + 'a>, CommandError<'a, GrepError>> {
         let mut i = 1;
         let mut add_mode: bool = false;
         let mut pattern: Option<&str> = None;
@@ -91,14 +91,20 @@ fn new(args: Vec<&'a str>) -> Result<Box<dyn Command<'a, GrepError> + 'a>, Comma
                 pattern: pattern.to_owned(),
                 line_number,
                 ignore_case,
-                outfile: Self::read_out_file(outfile_name, add_mode)?,
-                inputfile: Self::read_in_file(input_name)?,
+                outfile: match outfile_name {
+                    Some(outfile_name) => 
+                        Self::read_out_file(path.join(outfile_name), add_mode)?,
+                    None => Box::new(io::stdout()),
+                },
+                inputfile: if let Some(name) = input_name {
+                    Some(Self::read_in_file(path.join(name))?)
+                } else {None}
             }
         ))}
     }
 }
 
-impl<'a> Command<'a, GrepError> for Grep {
+impl<'a> Command<'a, GrepError> for Grep<'a> {
     fn run(mut self: Box<Self>) -> Result<bool, CommandError<'a, GrepError>> {
         if self.ignore_case {
             self.pattern = self.pattern.to_lowercase()
@@ -114,7 +120,7 @@ impl<'a> Command<'a, GrepError> for Grep {
                 } 
                 for (numero, line) in buffer.lines().flatten().enumerate() {
                     if Self::match_pattern(&line, &self.pattern, self.ignore_case){
-                        let line = if self.line_number {format!("{}. {}\n", numero, line)} 
+                        let line = if self.line_number {format!("{}. {}\n", numero+1, line)} 
                             else {format!("{}\n", line)};
                         self.outfile.write_all(line.as_bytes())?;
                     }
@@ -184,43 +190,12 @@ impl fmt::Display for GrepError {
     }
 }
 
-
-
-impl Grep {
+impl Grep<'_> {
     fn match_pattern(line: &str, pattern: &str, ignore_case: bool) -> bool {
         if ignore_case {
             line.to_lowercase().contains(pattern) 
         } else {
             line.contains(pattern)
-        }
-    }
-    
-    fn read_out_file(
-        filename: Option<&str>,
-        add_mode: bool,
-    ) -> Result<Box<dyn Write>, CommandError<'_, GrepError>> {
-        match filename {
-            Some(name) => match OpenOptions::new()
-                .append(add_mode)
-                .write(true)
-                .create(true)
-                .truncate(!add_mode)
-                .open(name)
-            {
-                Ok(file) => Ok(Box::new(file)),
-                Err(e) => Err(CommandError::UnopenedFile(name,e)),
-            },
-            None => Ok(Box::new(std::io::stdout())),
-        }
-    }
-
-    fn read_in_file(filename: Option<&str>) -> Result<Option<File>, CommandError<'_, GrepError>> {
-        match filename {
-            Some(name) => match File::open(name) {
-                Ok(file) => Ok(Some(file)),
-                Err(e) => Err(CommandError::UnopenedFile(name,e)),
-            },
-            None => Ok(None),
         }
     }
 }

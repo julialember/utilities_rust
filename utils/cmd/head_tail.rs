@@ -1,8 +1,7 @@
 use std::{
     collections::VecDeque,
     fmt,
-    fs::{File, OpenOptions},
-    io::{BufRead, BufReader, Read, Write},
+    io::{self, BufRead, BufReader, Read, Write}, path::PathBuf,
 };
 
 
@@ -21,15 +20,15 @@ impl fmt::Display for HeadTailError<'_> {
     }
 }
 
-pub struct HeadTail {
+pub struct HeadTail<'a> {
     mode: bool,
     skip_empty: bool,
     count: usize,
-    outfile: Box<dyn Write>,
-    inputfile: Box<dyn Read>,
+    outfile: Box<dyn Write + 'a>,
+    inputfile: Box<dyn Read + 'a>,
 }
 
-impl<'a> Command<'a, HeadTailError<'a>> for HeadTail {
+impl<'a> Command<'a, HeadTailError<'a>> for HeadTail<'a> {
     fn run(mut self: Box<Self>) -> Result<bool, CommandError<'a, HeadTailError<'a>>> {
         let reader = BufReader::new(self.inputfile);
         if self.mode {
@@ -88,8 +87,8 @@ impl<'a> Command<'a, HeadTailError<'a>> for HeadTail {
     }
 }
 
-impl<'a> CommandBuild<'a, HeadTailError<'a>> for HeadTail {
-    fn new(args: Vec<&'a str>) 
+impl<'a> CommandBuild<'a, HeadTailError<'a>> for HeadTail<'a>  {
+    fn new(args: Vec<&'a str>, path: PathBuf)
         -> Result<Box<dyn Command<'a, HeadTailError<'a>> + 'a>, CommandError<'a, HeadTailError<'a>>>{
         let mut i = 1;
         let mut mode: bool = true;
@@ -157,14 +156,20 @@ impl<'a> CommandBuild<'a, HeadTailError<'a>> for HeadTail {
             mode,
             count,
             skip_empty: skip,
-            outfile: Self::read_out_file(outfile_name, add_mode)?,
-            inputfile: Self::read_in_file(input_name)?,
-            }))
+            outfile: match outfile_name {
+                Some(outfile_name) => Self::read_out_file(path.join(outfile_name), add_mode)?,
+                None => Box::new(io::stdout()),
+            },
+            inputfile: match input_name {
+                Some(input_name) => Box::new(Self::read_in_file(path.join(input_name))?),
+                None => Box::new(io::stdin()),
+            }
+        }))
  
     }
 }
 
-impl<'a> HeadTail {
+impl<'a> HeadTail<'a> {
     fn parse_arg(arg: &'a str) -> Result<usize, CommandError<'a, HeadTailError<'a>>>{
         match arg.parse::<usize>() {
             Ok(num) => Ok(num),
@@ -172,37 +177,4 @@ impl<'a> HeadTail {
               ::Other("head-tail", HeadTailError::ParseError(arg))),
         }
     }
-
-    fn read_out_file(
-        filename: Option<&'a str>,
-        add_mode: bool,
-    ) -> Result<Box<dyn Write>, CommandError<'a, HeadTailError<'a>>> {
-        match filename {
-            Some(name) => match OpenOptions::new()
-                .append(add_mode)
-                .write(true)
-                .create(true)
-                .truncate(!add_mode)
-                .open(name)
-            {
-                Ok(file) => Ok(Box::new(file)),
-                Err(e) => Err(CommandError::UnopenedFile(name, e)),
-            },
-            None => Ok(Box::new(std::io::stdout())),
-        }
-    }
-
-    fn read_in_file(
-        filename: Option<&'a str>
-        ) -> Result<Box<dyn Read>, CommandError<'a, HeadTailError<'a>>> {
-        match filename {
-            Some(name) => match File::open(name) {
-                Ok(file) => Ok(Box::new(file)),
-                Err(e) => Err(CommandError::UnopenedFile(name, e)),
-            },
-            None => Ok(Box::new(std::io::stdin())),
-        }
-    }
 }
-
-
