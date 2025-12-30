@@ -29,6 +29,7 @@ fn showdir(now_dir: &Arc<RwLock<PathBuf>>, fulldir: bool) -> bool{
         else {
             print!("[???]~$ ");
         }
+        stdout().flush().expect("can't flush stdout");
         true
     } else {
         false
@@ -89,12 +90,11 @@ fn main() -> io::Result<()> {
         iter+=1;
         
         showdir(&now_dir, false);
-        stdout().flush().expect("can't flush stdout");
         stdin().read_line(&mut command).expect("can't read line");
 
         let mut command_tr = command.trim();
         if command_tr.is_empty() {continue;}
-        if command_tr.ends_with(" &") {
+        if command_tr.ends_with('&') {
             thread_mode = true;
             command_tr = command_tr.trim_matches('&');
         }
