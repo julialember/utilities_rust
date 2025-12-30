@@ -179,7 +179,6 @@ fn main() -> io::Result<()> {
         }
         command.clear();
     }
-    
     for thread in threads {
         if thread.join().is_err() {
             eprintln!("error with thread")

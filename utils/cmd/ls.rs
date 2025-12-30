@@ -164,7 +164,7 @@ impl<'a> Ls {
 
 
         write!(outfile,
-            "{} {:>2} {} {} {:>5}", perms, nlink, uid, gid, size)?;
+            "{} {:>2} {} {} {:>5} {}", perms, nlink, uid, gid, size, " ")?;
         if let Some(name) = 
             path.file_name() && 
             let Some(name) = name.to_str() {
