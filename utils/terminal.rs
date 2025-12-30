@@ -76,14 +76,13 @@ fn main() -> io::Result<()> {
         .truncate(false)
         .append(true)
         .read(true)
-        .write(true)
         .open(".shu_history")?));
     let mut threads: Vec<JoinHandle<()>> = Vec::new();
     let mut thread_mode = false;
     let now_dir = Arc::new(RwLock::new(env::current_dir()?));
     let mut iter = 0;
     'mainloop: loop {
-        if iter % 10 == 0 && threads.len() != 0 {
+        if iter % 10 == 0 && !threads.is_empty() {
             iter = 0;
             threads.retain(|th| th.is_finished());
         }
@@ -94,7 +93,7 @@ fn main() -> io::Result<()> {
         stdin().read_line(&mut command).expect("can't read line");
 
         let mut command_tr = command.trim();
-        if command_tr.len() == 0 {continue;}
+        if command_tr.is_empty() {continue;}
         if command_tr.ends_with(" &") {
             thread_mode = true;
             command_tr = command_tr.trim_matches('&');
@@ -129,9 +128,21 @@ fn main() -> io::Result<()> {
                     }
                     report_code("history", code, shu_arc)?;
                 },
+                "clearHIS" => {
+                    let code = match shu_arc.lock() {
+                        Ok(file) => file.set_len(0).is_ok(), 
+                        Err(_) => false,
+                    };
+                    report_code("clearHis", code, shu_arc)?;
+                }
+                "clear" => {
+                    print!("{}[2J", 27 as char);
+                    print!("{}[1;1H", 27 as char);
+                    report_code("clear", true, shu_arc)?;
+                }
                 i if i.starts_with("cd ") || i == "cd" => {
                     code = match i.split_once(' ') {
-                        Some((_, new_dir)) if new_dir != "" => {
+                        Some((_, new_dir)) if !new_dir.is_empty() => {
                             changedir(&now_dir, NewDir::StrDir(new_dir))
                         } 
                         _ => if let Some(home) = env::home_dir() {

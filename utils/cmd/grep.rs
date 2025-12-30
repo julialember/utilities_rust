@@ -1,29 +1,28 @@
 use std::{
     fmt, 
-    io::{self, BufRead, BufReader, Write, stdin}, 
+    io::{BufRead, BufReader, Write, stdin}, 
     path::PathBuf
 };
 
 
+
 use super::command::{
-    Command, CommandError, CommandBuild
+    Command, CommandError, CommandBuild, CommandBackPack,
+    BuildError
 };
 
-pub struct Grep<'a> {
+pub struct Grep {
     pattern: String,
     inputfile: Vec<Option<PathBuf>>,
-    outfile: Box<dyn Write + 'a>,
     count: bool,
     ignore_case: bool,
     line_number: bool,
 }
 
-impl<'a> CommandBuild<'a, GrepError> for Grep<'a> {
-fn new(args: Vec<&'a str>, path: PathBuf) -> Result<Box<dyn Command<'a, GrepError> + 'a>, CommandError<'a, GrepError>> {
-        let mut i = 1;
-        let mut add_mode: bool = false;
+impl<'a> CommandBuild<'a, GrepError> for Grep {
+fn new_obj(args: Vec<&'a str>, path: PathBuf) -> Result<Box<dyn Command<'a, GrepError> + 'a>, CommandError<'a, GrepError>> {
+        let mut i = 0;
         let mut pattern: Option<&str> = None;
-        let mut outfile_name: Option<&str> = None;
         let mut input_names: Vec<Option<PathBuf>> = Vec::new();
         let mut ignore_case = false;
         let mut line_number = false;
@@ -32,35 +31,22 @@ fn new(args: Vec<&'a str>, path: PathBuf) -> Result<Box<dyn Command<'a, GrepErro
             if args[i].starts_with('-') || args[i].starts_with('>') {
                 match args[i].trim() {
                     "-" => input_names.push(None),
-                    ">" | "-o" | "--output" | "--outfile" | "--to" => {
-                        if i + 1 >= args.len() {
-                            return Err(CommandError::NoArgument(args[i]))
-                        } else {
-                            i += 1;
-                            outfile_name = Some(args[i]);
-                        }
-                    }
-                    ">>" => if i+1 >= args.len() {
-                            return Err(CommandError::NoArgument(args[i]))
-                        } else {
-                            i+=1;
-                            add_mode = true;
-                            outfile_name = Some(args[i]);
-                        }
                     "-in" | "--input-file" | "-f" | "--from" => {
-                        if i + 1 >= args.len() {
-                            return Err(CommandError::NoArgument(args[i]));
-                        } else {
-                            i += 1;
-                            input_names.push(Some(path.join(args[i])))
+                        match CommandBackPack::get_next(&args, i) {
+                            Ok(res) => {
+                                input_names.push(Some(path.join(res)));
+                                i+=1;
+                            }
+                            Err(e) => return Err(CommandError::BuildError(e))
                         }
                     }
                     "-p" | "--pattern" | "--pat"  => {
-                        if i + 1 >= args.len() {
-                            return Err(CommandError::NoArgument(args[i]));
-                        } else {
-                            i += 1;
-                            pattern = Some(args[i])
+                        match CommandBackPack::get_next(&args, i) {
+                            Ok(res) => {
+                                pattern = Some(res);
+                                i+=1;
+                            }
+                            Err(e) => return Err(CommandError::BuildError(e)),
                         }
                     }
                     "-c" | "--count" | "--count-lines" => count = true,
@@ -68,10 +54,9 @@ fn new(args: Vec<&'a str>, path: PathBuf) -> Result<Box<dyn Command<'a, GrepErro
                         Self::help();
                         return Err(CommandError::Help);
                     }
-                    "-a" | "--add-mode" | "--add" => add_mode = true,
                     "-n" | "-ln"       | "--line-number" => line_number = true,
                     "-i" | "--ignore-case" | "--ignore" => ignore_case = true,
-                    _ => return Err(CommandError::UnexpectedArg(args[i])),
+                    _ => return Err(CommandError::BuildError(BuildError::UnexpectedArg(args[i]))),
                 }
             }
             else if pattern.is_none() {
@@ -89,19 +74,14 @@ fn new(args: Vec<&'a str>, path: PathBuf) -> Result<Box<dyn Command<'a, GrepErro
                 pattern: pattern.to_owned(),
                 line_number,
                 ignore_case,
-                outfile: match outfile_name {
-                    Some(outfile_name) => 
-                        Self::read_out_file(path.join(outfile_name), add_mode)?,
-                    None => Box::new(io::stdout()),
-                },
                 inputfile: input_names,
             }
         ))}
     }
 }
 
-impl<'a> Command<'a, GrepError> for Grep<'a> {
-    fn run(mut self: Box<Self>) -> Result<bool, CommandError<'a, GrepError>> {
+impl<'a> Command<'a, GrepError> for Grep {
+    fn run(mut self: Box<Self>, output: &mut CommandBackPack) -> Result<bool, CommandError<'a, GrepError>> {
         if self.ignore_case {
             self.pattern = self.pattern.to_lowercase()
         }
@@ -109,18 +89,21 @@ impl<'a> Command<'a, GrepError> for Grep<'a> {
             match file {
                 Some(input) => {
                     let buffer 
-                        = BufReader::new(Self::read_in_file(input)?);
+                        = match CommandBackPack::read_in_file(input) {
+                            Ok(read) => BufReader::new(read),
+                            Err(e) => return Err(CommandError::BuildError(e))
+                        };
                     if self.count {
-                        writeln!(self.outfile, "{}",  
-                            buffer.lines().flatten().filter(|line| 
+                        writeln!(output.stdout, "{}",  
+                            buffer.lines().map_while(Result::ok).filter(|line| 
                                     Self::match_pattern(line, &self.pattern, self.ignore_case)).count())?;
                         return Ok(true)
                     } 
-                    for (numero, line) in buffer.lines().flatten().enumerate() {
+                    for (numero, line) in buffer.lines().map_while(Result::ok).enumerate() {
                         if Self::match_pattern(&line, &self.pattern, self.ignore_case){
                             let line = if self.line_number {format!("{}. {}\n", numero+1, line)} 
                                 else {format!("{}\n", line)};
-                            self.outfile.write_all(line.as_bytes())?;
+                            output.stdout.write_all(line.as_bytes())?;
                         }
                     }
                 }
@@ -132,15 +115,15 @@ impl<'a> Command<'a, GrepError> for Grep<'a> {
                         if num == 0 {break;}  
                         if Self::match_pattern(&buffer, &self.pattern, self.ignore_case){
                             if self.count {line_count+=1} 
-                            write!(self.outfile, "{}", 
+                            write!(output.stdout, "{}", 
                                 if self.line_number {format!("{}{}", line_number, buffer)} 
-                                else { format!("{}", buffer)})?;
+                                else { buffer.to_string() })?;
                         } 
                         line_number+=1;
                         buffer.clear();
                     }
                     if self.count {
-                        writeln!(self.outfile, "{}", line_count)?;
+                        writeln!(output.stdout, "{}", line_count)?;
                     }
                 }
             }
@@ -160,14 +143,10 @@ fn help() {
     println!("  -n, --line-number           print line number with output lines");
     println!("  -c, --count                 print only a count of matching lines");
     println!("  -f, --from FILE             search PATTERN in FILE");
-    println!("   >, -o,--output FILE        write to FILE instead of stdout");
-    println!("   >>                         append to FILE instead of stdout");
     println!("  -he, --help                 display this help and exit");
-    println!("  -a, --add-mode,             did not truncate the output file ");
     println!();
     println!("EXAMPLES:");
     println!("  grep error log.txt          Search 'error' in log.txt");
-    println!("  grep -i warning *.log       Case-insensitive search in all .log files");
     println!("  grep -n pattern file        Show matching lines with numbers");
     println!("  grep -c error file          Count lines containing 'error'");
 }
@@ -188,7 +167,7 @@ impl fmt::Display for GrepError {
     }
 }
 
-impl Grep<'_> {
+impl Grep {
     fn match_pattern(line: &str, pattern: &str, ignore_case: bool) -> bool {
         if ignore_case {
             line.to_lowercase().contains(pattern) 

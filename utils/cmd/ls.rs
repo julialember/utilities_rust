@@ -1,26 +1,23 @@
 use std::{
-    fmt, fs::{self, DirEntry}, io::{self, Write}, os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt}, path::PathBuf
+    fmt, fs::{self, DirEntry}, io::{self, Write}, os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt}, path::{Path, PathBuf}
 };
 
 use super::command::{
-    Command, CommandError, CommandBuild
+    Command, CommandError, CommandBuild, CommandBackPack,
+    BuildError
 };
 
-pub struct Ls<'a>{
+pub struct Ls {
     dire: PathBuf,
-    outfile: Box<dyn Write + 'a>,
     show_hide: bool, 
     classify: bool,
     full_info: bool,
     show_hide_and: bool,
 }
 
-impl<'a> CommandBuild<'a, LsError> for Ls<'a> {
-fn new(args: Vec<&'a str>, path: PathBuf) 
-    -> Result<Box<dyn Command<'a, LsError> + 'a>, CommandError<'a, LsError>> {
-        let mut i = 1;
-        let mut add_mode: bool = false;
-        let mut outfile_name: Option<&str> = None;
+impl<'a> CommandBuild<'a, LsError> for Ls {
+fn new_obj(args: Vec<&'a str>, path: PathBuf) -> Result<Box<dyn Command<'a, LsError> + 'a>, CommandError<'a, LsError>> {
+        let mut i = 0;
         let mut dir: Option<PathBuf> = None;
         let mut show_hide = false;
         let mut classify = false;
@@ -29,33 +26,15 @@ fn new(args: Vec<&'a str>, path: PathBuf)
         while i < args.len() {
             if args[i].starts_with('-') || args[i].starts_with('>') {
                 match args[i].trim() {
-                    ">>" => {
-                        if i+1 >= args.len() {
-                            return Err(CommandError::NoArgument(args[i]))
-                        } else {
-                            i+=1;
-                            add_mode=true;
-                            outfile_name = Some(args[i]);
-                        }
-                    }
-                    ">" | "-o" | "--output" | "--outfile" | "--to" => {
-                        if i + 1 >= args.len() {
-                            return Err(CommandError::NoArgument(args[i]))
-                        } else {
-                            i += 1;
-                            outfile_name = Some(args[i]);
-                        }
-                    }
                     "-he" | "--help" | "--help-mode" => {
                         Self::help();
                         return Err(CommandError::Help);
                     }
-                    "--add-mode" | "--add" => add_mode = true,
                     "-F" | "--classify" => classify = true, 
                     "-l" | "--long-format" => full_info = true,
                     "-a" | "-all" => show_hide = true,
                     "-A" | "--almost-all" => show_hide_and = true,
-                    _ => return Err(CommandError::UnexpectedArg(args[i])),
+                    _ => return Err(CommandError::BuildError(BuildError::UnexpectedArg(args[i]))),
                 }
             }
             else {
@@ -68,10 +47,6 @@ fn new(args: Vec<&'a str>, path: PathBuf)
                 show_hide_and,
                 full_info,
                 classify,
-                outfile: match outfile_name {
-                    Some(name) => Self::read_out_file(path.join(name), add_mode)?,
-                    None => Box::new(io::stdout()),
-                }, 
                 dire: if let Some(dir) = dir {dir} else {path},
             }
         ))
@@ -79,14 +54,14 @@ fn new(args: Vec<&'a str>, path: PathBuf)
 }
 
 
-impl<'a> Command<'a, LsError> for Ls<'a> {
-    fn run(mut self: Box<Self>) -> Result<bool, CommandError<'a, LsError>> {
+impl<'a> Command<'a, LsError> for Ls {
+    fn run(mut self: Box<Self>, output: &mut CommandBackPack) -> Result<bool, CommandError<'a, LsError>> {
         if self.show_hide && !self.show_hide_and{
             if self.full_info {
-                Self::print_info(".".into(), &mut self.outfile)?;
-                Self::print_info("..".into(), &mut self.outfile)?;
+                Self::print_info(".".into(), &mut output.stdout)?;
+                Self::print_info("..".into(), &mut output.stdout)?;
             } else {
-                writeln!(self.outfile, "{}", if self.classify {"./\n../"} else {".\n.."})?;
+                writeln!(output.stdout, "{}", if self.classify {"./\n../"} else {".\n.."})?;
             }
         } else if self.show_hide_and && !self.show_hide{
             self.show_hide = true; 
@@ -100,22 +75,20 @@ impl<'a> Command<'a, LsError> for Ls<'a> {
                             if name.starts_with('.') {
                                 if self.show_hide {
                                     if self.full_info {
-                                        Self::print_info(ent.path(), &mut self.outfile)?;
+                                        Self::print_info(ent.path(), &mut output.stdout)?;
                                     }
                                     else {
-                                        write!(self.outfile, "{}", name)?;
-                                        writeln!(self.outfile, "{}", 
+                                        write!(output.stdout, "{}", name)?;
+                                        writeln!(output.stdout, "{}", 
                                             if self.classify {Self::classify(&ent)} else {' '})?;
                                     }
                                 }
+                            } else if self.full_info {
+                                Self::print_info(ent.path(), &mut output.stdout)?; 
                             } else {
-                                if self.full_info {
-                                    Self::print_info(ent.path(), &mut self.outfile)?; 
-                                } else {
-                                    write!(self.outfile, "{}", name)?;
-                                    writeln!(self.outfile, "{}", 
-                                        if self.classify {Self::classify(&ent)} else {' '})?;
-                                }
+                                write!(output.stdout, "{}", name)?;
+                                writeln!(output.stdout, "{}", 
+                                    if self.classify {Self::classify(&ent)} else {' '})?;
                             }
                         } 
                     } 
@@ -139,14 +112,11 @@ impl<'a> Command<'a, LsError> for Ls<'a> {
         println!("  List information about the FILEs (the current directory by default).");
         println!();
         println!("OPTIONS:");
-        println!("   >>                        append to FILE instead of stdout");
         println!("  -a, --all                  do not ignore entries starting with .");
         println!("  -A, --almost-all           do not list implied . and ..");
         println!("  -F, --classify             show the type of element");
         println!("  -l, --long-format          show the full info of the file");
-        println!("   >, -o,--output FILE       write to FILE instead of stdout");
         println!("  -h, --help                 display this help and exit");
-        println!("  -a, --add-mode,            did not truncate the output file ");
         println!();
         println!("EXAMPLES:");
         println!("  ls                         List files in the current directory");
@@ -157,7 +127,7 @@ impl<'a> Command<'a, LsError> for Ls<'a> {
     
 }
 
-impl<'a> Ls<'a> {
+impl<'a> Ls {
     fn print_info(path: PathBuf, outfile: &mut Box<dyn Write + 'a>) -> io::Result<()> {
         let metadata = match fs::metadata(&path) {
             Ok(m) => m,
@@ -190,7 +160,7 @@ impl<'a> Ls<'a> {
 
 
         write!(outfile,
-            "{} {:>2} {} {} {:>5} {}", perms, nlink, uid, gid, size, "")?;
+            "{} {:>2} {} {} {:>5} {}", perms, nlink, uid, gid, size, " ")?;
         if let Some(name) = 
             path.file_name() && 
             let Some(name) = name.to_str() {
@@ -217,13 +187,13 @@ impl<'a> Ls<'a> {
             '|'
         } else if file_type.is_socket() {
             '='
-        } else if metadata.permissions().readonly() == false && Self::is_executable(&path.path()) {
+        } else if !metadata.permissions().readonly() && Self::is_executable(&path.path()) {
             '*'
         } else {
             ' '
         }
     }
-    fn is_executable(path: &PathBuf) -> bool {
+    fn is_executable(path: &Path) -> bool {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;

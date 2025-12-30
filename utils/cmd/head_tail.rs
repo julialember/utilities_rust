@@ -10,7 +10,10 @@ pub enum HeadTailError<'a> {
     ParseError(&'a str),
 }
 
-use super::command::{Command, CommandBuild, CommandError};
+use super::command::{
+    Command, CommandBuild, CommandError, CommandBackPack,
+    BuildError,
+};
 
 impl fmt::Display for HeadTailError<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -24,25 +27,25 @@ pub struct HeadTail<'a> {
     mode: bool,
     skip_empty: bool,
     count: usize,
-    outfile: Box<dyn Write + 'a>,
     inputfile: Box<dyn Read + 'a>,
 }
 
 impl<'a> Command<'a, HeadTailError<'a>> for HeadTail<'a> {
-    fn run(mut self: Box<Self>) -> Result<bool, CommandError<'a, HeadTailError<'a>>> {
+    fn run(self: Box<Self>, output: &mut CommandBackPack) 
+            -> Result<bool, CommandError<'a, HeadTailError<'a>>> {
         let reader = BufReader::new(self.inputfile);
         if self.mode {
             for line in reader
                 .lines()
-                .filter_map(Result::ok) 
+                .map_while(Result::ok) 
                 .filter(|l| !(self.skip_empty && l.is_empty()))
                 .take(self.count)
             {
-                self.outfile.write_all(format!("{}\n", line).as_bytes())?;
+                output.stdout.write_all(format!("{}\n", line).as_bytes())?;
             }
         } else {
             let mut buffer = VecDeque::with_capacity(self.count);
-            for line in reader.lines().flatten() {
+            for line in reader.lines().map_while(Result::ok) {
                 if self.skip_empty && line.is_empty() {
                     continue;
                 }
@@ -52,7 +55,7 @@ impl<'a> Command<'a, HeadTailError<'a>> for HeadTail<'a> {
                 buffer.push_back(line)
             }
             for line in buffer.iter() {
-                self.outfile.write_all(format!("{}\n", line).as_bytes())?;
+                output.stdout.write_all(format!("{}\n", line).as_bytes())?;
             }
         }
         Ok(true)
@@ -88,12 +91,9 @@ impl<'a> Command<'a, HeadTailError<'a>> for HeadTail<'a> {
 }
 
 impl<'a> CommandBuild<'a, HeadTailError<'a>> for HeadTail<'a>  {
-    fn new(args: Vec<&'a str>, path: PathBuf)
-        -> Result<Box<dyn Command<'a, HeadTailError<'a>> + 'a>, CommandError<'a, HeadTailError<'a>>>{
-        let mut i = 1;
+fn new_obj(args: Vec<&'a str>, path: PathBuf) -> Result<Box<dyn Command<'a, HeadTailError<'a>> + 'a>, CommandError<'a, HeadTailError<'a>>> {
+        let mut i = 0;
         let mut mode: bool = true;
-        let mut add_mode: bool = false;
-        let mut outfile_name: Option<&str> = None;
         let mut input_name: Option<&str> = None;
         let mut skip = false;
         let mut count = 10;
@@ -101,25 +101,9 @@ impl<'a> CommandBuild<'a, HeadTailError<'a>> for HeadTail<'a>  {
             if args[i].starts_with('-') || args[i].starts_with('>') {
                 match args[i].trim() {
                     "-" => input_name = None,
-                    ">" | "-o" | "--output" | "--outfile" | "--to" => {
-                        if i + 1 >= args.len() {
-                            return Err(CommandError::NoArgument(args[i]));
-                        } else {
-                            i += 1;
-                            outfile_name = Some(args[i]);
-                        }
-                    }
-                    ">>" => if i + 1 >= args.len() {
-                        return Err(CommandError::NoArgument(args[i]));
-                        } else {
-                            i+=1;
-                            outfile_name = Some(args[i]);
-                            add_mode=true;
-                        }
-
                     "-i" | "--input-file" | "-f" | "--from" => {
                         if i + 1 >= args.len() {
-                            return Err(CommandError::NoArgument(args[i]));
+                            return Err(CommandError::BuildError(BuildError::NoArgument(args[i])));
                         } else {
                             i += 1;
                             input_name = Some(args[i])
@@ -127,7 +111,7 @@ impl<'a> CommandBuild<'a, HeadTailError<'a>> for HeadTail<'a>  {
                     }
                     "-c" | "--count" | "--count-lines" => {
                         if i + 1 >= args.len() {
-                            return Err(CommandError::NoArgument(args[i]));
+                            return Err(CommandError::BuildError(BuildError::NoArgument(args[i])));
                         } else {
                             i += 1;
                             count = Self::parse_arg(args[i])?;      
@@ -140,13 +124,10 @@ impl<'a> CommandBuild<'a, HeadTailError<'a>> for HeadTail<'a>  {
                         Self::help();
                         return Err(CommandError::Help);
                     }
-                    "-a" | "--add-mode" | "--add" => add_mode = true,
-                    _ => return Err(CommandError::UnexpectedArg(args[i])),
+                    _ => return Err(CommandError::BuildError(BuildError::UnexpectedArg(args[i]))),
                 }
             } else if input_name.is_none() {
                 input_name = Some(args[i])
-            } else if outfile_name.is_none() {
-                outfile_name = Some(args[i])
             } else {
                 count = Self::parse_arg(args[i])?;
             }
@@ -156,12 +137,11 @@ impl<'a> CommandBuild<'a, HeadTailError<'a>> for HeadTail<'a>  {
             mode,
             count,
             skip_empty: skip,
-            outfile: match outfile_name {
-                Some(outfile_name) => Self::read_out_file(path.join(outfile_name), add_mode)?,
-                None => Box::new(io::stdout()),
-            },
             inputfile: match input_name {
-                Some(input_name) => Box::new(Self::read_in_file(path.join(input_name))?),
+                Some(input_name) => match CommandBackPack::read_in_file(path.join(input_name)) {
+                    Ok(file) => Box::new(file),
+                    Err(e) => return Err(CommandError::BuildError(e)),
+                }
                 None => Box::new(io::stdin()),
             }
         }))

@@ -11,24 +11,37 @@ use cat::{Cat, CatError};
 use head_tail::{HeadTail, HeadTailError};
 use ls::{Ls, LsError};
     
-use command::CommandBuild;
+use command::{
+    CommandBuild, CommandBackPack};
 
 fn run<'a, E, B>(vec: Vec<&'a str>, path: PathBuf) -> bool 
     where 
         B: CommandBuild<'a, E>,
         E: fmt::Display,
 {
-    match B::new(vec, path) {
+    let (mut str, args) = 
+            match CommandBackPack::new(vec, &path) {
+        Ok(args) => args,
+        Err(e) => {
+            eprintln!("{}", e);
+            return false;
+        }
+    };
+    match B::new_obj(args, path) {
         Ok(command) => 
-            match command.run() {
+            match command.run(&mut str) {
                 Err(e) => {
-                    eprintln!("{}", e); 
+                    if let Err(e) = writeln!(str.stdout, "{}", e) {
+                        println!("error with write in stderr, so here the error: {}", e);
+                    }
                     false
                 }
                 Ok(code) => code
             }
         Err(e) => {
-            eprintln!("{}", e);
+            if let Err(e) = writeln!(str.stderr, "{}", e) {
+                println!("error with write into stderr, so error: {}", e);
+            }
             false
         }
     }
@@ -37,14 +50,15 @@ fn run<'a, E, B>(vec: Vec<&'a str>, path: PathBuf) -> bool
 pub fn todo(command: &str, path: PathBuf) -> bool {
     let vec: Vec<&str> = command.split_whitespace().collect();
     match vec[0] {
-        "grep" => return run::<'_, GrepError, Grep>(vec, path),
-        "cat" => return run::<'_, CatError, Cat>(vec, path),
-        "head-tail" => return run::<'_, HeadTailError, HeadTail>(vec, path),
-        "ls" => return run::<'_, LsError, Ls>(vec, path),
+        "grep" => run::<'_, GrepError, Grep>(vec, path),
+        "cat" =>  run::<'_, CatError, Cat>(vec, path),
+        "head-tail" => run::<'_, HeadTailError, HeadTail>(vec, path),
+        "ls" => run::<'_, LsError, Ls>(vec, path),
         _=> {
             eprintln!("shu: unknown command: {}", vec[0]);
-            return false;
+            false
         }
         
     }
 }
+
