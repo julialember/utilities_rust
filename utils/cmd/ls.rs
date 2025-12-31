@@ -1,7 +1,7 @@
 use std::{
     fmt, 
     fs::{self, DirEntry}, 
-    io::{self, Write}, 
+    io::{self, PipeReader, Write}, 
     os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt}, 
     path::{Path, PathBuf}
 };
@@ -20,7 +20,8 @@ pub struct Ls {
 }
 
 impl<'a> CommandBuild<'a, LsError> for Ls {
-fn new_obj(args: Vec<&'a str>, path: &'a Path, _p:bool) -> Result<Box<dyn Command<'a, LsError> + 'a>, CommandError<'a, LsError>> {
+fn new_obj(args: Vec<&'a str>, path: &'a Path, _p:Option<&'a PipeReader>) 
+    -> Result<Box<dyn Command<'a, LsError> + 'a>, CommandError<'a, LsError>> {
         let mut i = 0;
         let mut dir: Option<PathBuf> = None;
         let mut show_hide = false;

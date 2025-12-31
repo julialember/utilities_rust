@@ -7,7 +7,9 @@ use std::{
 mod cmd;
 
 fn report_code(command: &str, code: bool, shu_his: Arc<Mutex<File>>) -> io::Result<()>{
-    println!("exit code: {}", if code {0} else {1});
+    if !code{
+        println!("ERROR!\nexit code: 1")
+    };
     if let Ok(mut f) = shu_his.lock() {
         writeln!(f, "{} {}", command, if code {""} else {"ERROR"})?
     }

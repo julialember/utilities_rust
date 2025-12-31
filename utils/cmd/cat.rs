@@ -1,6 +1,6 @@
 use std::{
     fmt, 
-    io::{self, BufRead, BufReader, Read, Write}, 
+    io::{self, BufRead, BufReader, PipeReader, Read, Write}, 
     path::Path
 };
 
@@ -46,12 +46,12 @@ impl<'a> Cat<'a> {
 }
 
 impl<'a> CommandBuild<'a, CatError> for Cat<'a> {
-fn new_obj(args: Vec<&'a str>, path: &'a Path, pipe_mode: bool) 
+fn new_obj(args: Vec<&'a str>, path: &'a Path, pipe: Option<&'a PipeReader>)
     -> Result<Box<dyn Command<'a, CatError> + 'a>, CommandError<'a, CatError>> {
         let mut i = 0;
         let mut input_files: Vec<InputFile> = Vec::new();
-        if pipe_mode {
-            input_files.push(InputFile::Pipe);
+        if let Some(pipe) = pipe {
+            input_files.push(InputFile::Pipe(pipe));
         }
         let mut show_end = false;
         let mut line_number = false;

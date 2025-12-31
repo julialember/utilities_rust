@@ -1,6 +1,6 @@
 use std::{
     fmt, 
-    io::{self, BufRead, BufReader, Read, Write}, 
+    io::{self, BufRead, BufReader, PipeReader, Read, Write}, 
     path::Path
 };
 
@@ -20,13 +20,13 @@ pub struct Grep<'a> {
 }
 
 impl<'a> CommandBuild<'a, GrepError> for Grep<'a> {
-fn new_obj(args: Vec<&'a str>, path: &'a Path, pipe_mode: bool) 
+fn new_obj(args: Vec<&'a str>, path: &'a Path, pipe: Option<&'a PipeReader>)
         -> Result<Box<dyn Command<'a, GrepError> + 'a>, CommandError<'a, GrepError>> {
         let mut i = 0;
         let mut pattern: Option<&str> = None;
         let mut input_files: Vec<InputFile> = Vec::new();
-        if pipe_mode {
-            input_files.push(InputFile::Pipe);
+        if let Some(pipe) = pipe {
+            input_files.push(InputFile::Pipe(pipe));
         }
         let mut ignore_case = false;
         let mut line_number = false;
@@ -133,7 +133,8 @@ impl<'a> Command<'a, GrepError> for Grep<'a> {
             Self::print_out(&self, output, file)?;
         }
         Ok(exit_code)
-    } 
+} 
+
 fn help() {
     println!("Search for PATTERN in each FILE or standard input.");
     println!();
@@ -166,7 +167,7 @@ pub enum GrepError {
 impl fmt::Display for GrepError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::NoPattern => writeln!(f, "no pattern"),
+            Self::NoPattern => write!(f, "no pattern"),
         }
     }
 }

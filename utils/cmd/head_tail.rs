@@ -1,7 +1,7 @@
 use std::{
     collections::VecDeque,
     fmt,
-    io::{BufRead, BufReader, Write}, 
+    io::{BufRead, BufReader, PipeReader, Write}, 
     path::Path,
 };
 
@@ -17,13 +17,6 @@ use super::command::{
     BuildError, InputFile
 };
 
-impl fmt::Display for HeadTailError<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::ParseError(s) => writeln!(f, "can't parse argument: {}", s)
-        }
-    }
-}
 
 pub struct HeadTail<'a> {
     mode: bool,
@@ -100,13 +93,13 @@ impl<'a> Command<'a, HeadTailError<'a>> for HeadTail<'a> {
 }
 
 impl<'a> CommandBuild<'a, HeadTailError<'a>> for HeadTail<'a>  {
-fn new_obj(args: Vec<&'a str>, path: &'a Path, pipe_mode: bool) -> 
+fn new_obj(args: Vec<&'a str>, path: &'a Path, pipe: Option<&'a PipeReader>) -> 
     Result<Box<dyn Command<'a, HeadTailError<'a>> + 'a>, CommandError<'a, HeadTailError<'a>>> {
         let mut i = 0;
         let mut mode: bool = true;
         let mut input_files = Vec::new();
-        if pipe_mode {
-            input_files.push(InputFile::Pipe);
+        if let Some(pipe) = pipe {
+            input_files.push(InputFile::Pipe(pipe));
         }
         let mut skip_empty = false;
         let mut count = 10;
@@ -160,6 +153,14 @@ impl<'a> HeadTail<'a> {
             Ok(num) => Ok(num),
             Err(_) => Err(CommandError
               ::Other("head-tail", HeadTailError::ParseError(arg))),
+        }
+    }
+}
+
+impl fmt::Display for HeadTailError<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ParseError(s) => writeln!(f, "can't parse argument: {}", s)
         }
     }
 }
