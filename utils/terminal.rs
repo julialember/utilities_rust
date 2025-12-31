@@ -20,6 +20,9 @@ fn process_terminated() {
     println!("tranks for using our terminal!");
 }
 
+//TODO cross-platform 
+//TODO tests 
+
 fn showdir(now_dir: &Arc<RwLock<PathBuf>>, fulldir: bool) -> bool{
     if let Ok(pth) = now_dir.read() { 
         if fulldir {
@@ -31,7 +34,7 @@ fn showdir(now_dir: &Arc<RwLock<PathBuf>>, fulldir: bool) -> bool{
         else {
             print!("[???]~$ ");
         }
-        stdout().flush().expect("can't flush stdout");
+        let _ =stdout().flush();
         true
     } else {
         false
@@ -71,12 +74,16 @@ fn changedir(now_dir: &Arc<RwLock<PathBuf>>, new_dir: NewDir) -> bool {
     }else {false}
 }
 
+fn clear_history() -> io::Result<()> {
+    File::create(".shu_history")?;
+    Ok(())
+}
+
 fn main() -> io::Result<()> { 
     let mut command = String::new();
     let shu_his = 
         Arc::new(Mutex::new(OpenOptions::new()
         .create(true)
-        .truncate(false)
         .append(true)
         .read(true)
         .open(".shu_history")?));
@@ -92,7 +99,7 @@ fn main() -> io::Result<()> {
         iter+=1;
         
         showdir(&now_dir, false);
-        stdin().read_line(&mut command).expect("can't read line");
+        let _= stdin().read_line(&mut command);
 
         let mut command_tr = command.trim();
         if command_tr.is_empty() {continue;}
@@ -131,10 +138,7 @@ fn main() -> io::Result<()> {
                     report_code("history", code, shu_arc)?;
                 },
                 "clearHIS" => {
-                    let code = match shu_arc.lock() {
-                        Ok(file) => file.set_len(0).is_ok(), 
-                        Err(_) => false,
-                    };
+                    let code = clear_history().is_ok();
                     report_code("clearHis", code, shu_arc)?;
                 }
                 "clear" => {

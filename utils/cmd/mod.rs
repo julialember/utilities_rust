@@ -37,14 +37,13 @@ fn run<'a, E, B>(vec: Vec<&'a str>, path: &'a Path, pipe: Option<&'a PipeReader>
                     }
                     false
                 }
-                Ok(code) => {
-                    if let Some(args) = pipe_args && let Some(pipe) = pipe_next{
-                        str.stdout.flush().expect("can't flush stdout");
-                        drop(str.stdout);
-                        set(args, path, Some(&pipe))
+                Ok(code) => 
+                    if let Some(args_pipe) 
+                        = pipe_args && let Some(pipe) = pipe_next{
+                        let _= str.stdout.flush();
+                        drop(str);
+                        set(args_pipe, path, Some(&pipe))
                     } else {code}
-                }
-
             }
         Err(e) => {
             if let Err(e) = writeln!(str.stderr, "{}", e) {
