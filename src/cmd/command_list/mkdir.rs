@@ -74,36 +74,13 @@ impl Mkdir<'_> {
 impl<'a> Command<'a, MkdirError> for Mkdir<'a> {
     fn run(self: Box<Self>, output: &mut CommandBackPack) 
             -> Result<bool, CommandError<'a, MkdirError>> {
-        let mut i = 0;
-        let args = self.command_format;
-        while i < args.len() {
-            if args[i].starts_with('{') || (i+1<=args.len() && args[i+1].starts_with('{')) {
-                if let Some(arg) = 
-                    args[i].strip_prefix('{').and_then(|x| x.strip_suffix('}')) {
-                    for sub_str in arg.split(',').map(|x|x.trim()) {
-                        let path = if i-1 > 0 {
-                            &self.path.join(args[i-1 as usize])
-                        } else {self.path};
-
-                        if let Err(e) = Self::makedir(
-                            path, sub_str, self.parents) {
-                            return Err(CommandError::Other("mkdir", e))
-                        } else if self.verbose {
-                            writeln!(output.stdout, "dir {} was created", i)?;
-                        }
-                    }
-                } else {
-                    return Err(CommandError::Other("mkdir", MkdirError::UnclosedBrecker))
-                }
-            } else {
-                if let Err(e) = Self::makedir(self.path, args[i], self.parents) {
-                    return Err(CommandError::Other("mkdir", e))
-                } 
-                if self.verbose {
-                    writeln!(output.stdout, "dir {} was created", args[i])?;
-                }
-            } 
-            i+=1;
+        for arg in self.command_format {
+            if let Err(e) = Self::makedir(
+                self.path, arg, self.parents) {
+                return Err(CommandError::Other("mkdir", e))
+            } else if self.verbose {
+                writeln!(output.stdout, "dir {} was created", arg)?;
+            }
         }
         Ok(true)
     }

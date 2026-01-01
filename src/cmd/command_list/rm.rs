@@ -23,7 +23,7 @@ fn new_obj(args: Vec<&'a str>, path: &'a Path, _pipe: Option<&'a PipeReader>)
         while i < args.len() {
             if args[i].starts_with('-') || args[i].starts_with('>') {
                 match args[i].trim() {
-                    "-rf" | "--rf" => dir = true,
+                    "-rf" | "--remove-force" => dir = true,
                     _ => return Err(CommandError::BuildError(BuildError::UnexpectedArg(args[i]))),
                 }
             }
@@ -47,7 +47,7 @@ fn new_obj(args: Vec<&'a str>, path: &'a Path, _pipe: Option<&'a PipeReader>)
 impl Rm<'_> {
     fn remove(path: &Path, name: &str, dir: bool) -> Result<(), RmError> {
         let path = path.join(name);
-        if path.is_dir() && !dir {
+        if path.is_dir() {
             if !dir {
                 return Err(RmError::IsDir(path))
             } else if let Err(e) = fs::remove_dir_all(&path) {
@@ -64,51 +64,40 @@ impl<'a> Command<'a, RmError> for Rm<'a> {
     fn run(self: Box<Self>, output: &mut CommandBackPack) 
             -> Result<bool, CommandError<'a, RmError>> {
         let mut exit_code = true;
-        let mut last_arg: Option<PathBuf> = None;
         for arg in self.names {
-            if arg.starts_with('{') && let Some(arg) = 
-                    arg.strip_prefix('{').and_then(|x| x.strip_suffix('}')) {
-                    for i in arg.split(',').map(|x|x.trim()) {
-                        if let Err(e) = Self::remove(match &last_arg {
-                            Some(pth) => pth,
-                            None => &self.path
-                        }, i, self.dir) {
-                            match e {
-                                RmError::IsDir(_) => {
-                                    write!(output.stderr, "{}", e)?;  
-                                    exit_code = false;
-                                },
-                                _=> return Err(CommandError::Other("rm", e)),
-                            }
-                        }               
-                    }
+            if let Err(e) = Self::remove(self.path, arg, self.dir) {
+                match e {
+                    RmError::IsDir(_) => {
+                        write!(output.stderr, "{}", e)?;  
+                        exit_code = false;
+                    },
+                    _=> return Err(CommandError::Other("rm", e)),
                 }
+            }
         }
         Ok(exit_code)
     }
  
+
     fn help() {
-        println!("Concatenate FILE(s) to standard output.");
+        println!("Remove (unlink) the FILE(s).");
         println!();
         println!("USAGE:");
-        println!("  cat [OPTIONS] [FILE]...");
+        println!("  rm [OPTIONS] [FILE]...");
         println!();
-        println!("If FILE is '-' or omitted, read from standard input.");
+        println!("By default, rm does not remove directories.");
         println!();
         println!("OPTIONS:");
-        println!("  -n, --line-number         number all output lines");
-        println!("  -b, --non-blank           number non-empty output lines");
-        println!("  -E, --show-ends           display $ at end of each line");
-        println!("  -s, --squeeze-blank       suppress repeated empty output lines");
-        println!("  -f, --from, --input-file  specify input file (can be used multiple times)");
-        println!("  -he, --help               display this help and exit");
+        println!("  -rf                   shortcut for recursive and force removal without confirmation");
+        println!("  -he, --help           display this help and exit");
         println!();
         println!("EXAMPLES:");
-        println!("  cat file.txt              Display file.txt contents");
-        println!("  cat -n file1 file2        Display files with line numbers");
-        println!("  cat -E > output.txt       Read stdin, show $ at line ends, write to file");
-        println!("  cat file1 - file2         Display file1, then stdin, then file2");
+        println!("  rm file.txt           Remove a single file");
+        println!("  rm -rf /tmp/logs      Forcefully and recursively remove the logs directory");
+        println!("  rm -f config.old      Remove a file without asking, even if it's write-protected");
+        println!("  rm file1.txt file2.txt Remove multiple files at once");
     }
+
     
 }
     

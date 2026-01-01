@@ -147,11 +147,10 @@ pub fn split_args(command: &str) -> Vec<String> {
                 
                 if ch == '|' || ch == '>' {
                     let mut op = ch.to_string();
-                    if let Some(&next) = chars.peek() {
-                        if ch == '>' && (next == '>' || next == '=') {
+                    if let Some(&next) = chars.peek() 
+                        && ch == '>' && (next == '>' || next == '='){
                             op.push(chars.next().unwrap());
                         }
-                    }
                     args.push(op);
                 }
             }

@@ -1,7 +1,7 @@
 use std::{fmt, io::PipeReader, path::{Path, PathBuf}};
 
 use crate::command_build::{
-    build::CommandBuild, parse::{CommandBackPack, split_args, split_args_string}
+    build::CommandBuild, parse::{CommandBackPack, split_args}
 };
 
 use crate::command_list::{
@@ -71,9 +71,9 @@ pub fn set(vec: Vec<&str>, path: &Path, pipe_mode: Option<&PipeReader>) -> bool 
 }
 
 pub fn todo(command: &str, path: PathBuf) -> bool {
-    let veec_s: Vec<String> = split_args_string(command); 
-    println!("{:?}", veec_s);
-    false
+    let vec_string: Vec<String> = split_args(command);
+    let vec = vec_string.iter().map(|x| x.as_str()).collect();
+    set(vec, &path, None)
 }
 
 
