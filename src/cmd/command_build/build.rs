@@ -12,7 +12,6 @@ pub trait CommandBuild<'a, E> {
         -> Result<Box<dyn Command<'a, E> + 'a>, CommandError<'a, E>>;
 }
 
-#[derive(Debug)]
 pub enum BuildError<'a> {
     UnexpectedArg(&'a str),
     NoArgument(&'a str),

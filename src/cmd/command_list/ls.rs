@@ -212,7 +212,6 @@ impl<'a> Ls {
     }
 }
     
-#[derive(Debug)]
 pub enum LsError{
     NotDir(PathBuf),
     ReadDirError(PathBuf, io::Error),

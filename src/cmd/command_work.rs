@@ -9,7 +9,9 @@ use crate::command_list::{
     Grep, GrepError, 
     Cat, CatError,
     Ls, LsError,
-    HeadTail, HeadTailError
+    HeadTail, HeadTailError,
+    Mkdir, MkdirError,
+    RmError, Rm
 };
 
 fn run<'a, E, B>(vec: Vec<&'a str>, path: &'a Path, pipe: Option<&'a PipeReader>) -> bool 
@@ -59,6 +61,8 @@ pub fn set(vec: Vec<&str>, path: &Path, pipe_mode: Option<&PipeReader>) -> bool 
         "cat" =>  run::<'_, CatError, Cat>(vec, path, pipe_mode),
         "head-tail" => run::<'_, HeadTailError, HeadTail>(vec, path, pipe_mode),
         "ls" => run::<'_, LsError, Ls>(vec, path, pipe_mode),
+        "mkdir" => run::<'_, MkdirError, Mkdir>(vec, path, pipe_mode), 
+        "rm" => run::<'_, RmError, Rm>(vec, path, pipe_mode),
         _=> {
             eprintln!("shu: unknown command: {}", vec[0]);
             false

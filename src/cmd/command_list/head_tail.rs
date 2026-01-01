@@ -6,7 +6,6 @@ use std::{
 };
 
 
-#[derive(Debug)]
 pub enum HeadTailError<'a> {
     ParseError(&'a str),
 }

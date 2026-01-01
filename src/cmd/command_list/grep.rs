@@ -158,7 +158,6 @@ fn help() {
     
 }
     
-#[derive(Debug)]
 pub enum GrepError {
     NoPattern,
 }

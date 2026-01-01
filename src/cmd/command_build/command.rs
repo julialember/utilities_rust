@@ -7,8 +7,6 @@ use super::parse::{
     InputFile, CommandBackPack
 };
 
-
-#[derive(Debug)]
 pub enum CommandError<'a, E> {
     WriteError(io::Error),
     BuildError(BuildError<'a>),

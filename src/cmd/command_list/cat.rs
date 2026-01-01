@@ -146,7 +146,6 @@ impl<'a> Command<'a, CatError> for Cat<'a> {
     
 }
     
-#[derive(Debug)]
 pub enum CatError{
 }
 

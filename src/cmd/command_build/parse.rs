@@ -158,39 +158,23 @@ pub fn split_args(command: &str) -> Vec<&str> {
                 was_blank = true;
                 start_arg = end_arg;
             }
-            '<' => {
-                if !was_blank {
+            '{' => {
+                if !was_blank && start_arg != end_arg {
                     vec.push(&command[start_arg..end_arg]);
                 }
-                if let Some(&'<') = chars.peek() {
-                    chars.next();
-                    vec.push("<<");
-                    end_arg += 2;
-                } else if let Some(&'>') = chars.peek() {
-                    chars.next();
-                    vec.push("<>");
-                    end_arg += 2;
-                } else {
-                    vec.push("<");
-                    end_arg += 1;
-                }
-                was_blank = true;
                 start_arg = end_arg;
-            }
-            '&' => {
-                if !was_blank {
-                    vec.push(&command[start_arg..end_arg]);
+                while let Some(next_ch) = chars.next() {
+                    end_arg+=1;
+                    if next_ch == '}' {
+                        break;
+                    }
                 }
-                if let Some(&'&') = chars.peek() {
-                    chars.next();
-                    vec.push("&&");
-                    end_arg += 2;
-                } else {
-                    vec.push("&");
-                    end_arg += 1;
+                if start_arg <= end_arg && start_arg < command.len() {
+                    vec.push(&command[start_arg..=end_arg]);
                 }
-                was_blank = true;
-                start_arg = end_arg;
+                end_arg+=1;
+                start_arg=end_arg;
+                was_blank=true;
             }
             '\'' | '"' => {
                 let quote_char = ch;
