@@ -83,12 +83,6 @@ impl<'a> Command<'a, RmError> for Rm<'a> {
                         }               
                     }
                 }
-            else {
-                match Self::remove(self.path, arg, self.dir) {
-                    Err(e) => return Err(CommandError::Other("rm", e)),
-                    Ok(pth) => last_arg = Some(pth),
-                }
-            }
         }
         Ok(exit_code)
     }

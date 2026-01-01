@@ -118,104 +118,109 @@ impl<'a> CommandBackPack<'a> {
     }
 }
 
+pub fn split_args(command: &str) -> Vec<String> {
+    let mut args = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes = None;
+    let mut brace_depth = 0;
+    let mut chars = command.trim().chars().peekable();
 
-
-pub fn split_args(command: &str) -> Vec<&str> {
-    let mut vec = Vec::new();
-    let mut start_arg = 0;
-    let mut end_arg = 0;
-    let mut chars = command.chars().peekable();
-    let mut was_blank = false;
-    
     while let Some(ch) = chars.next() {
         match ch {
-            '#' => break,
-            '|' => {
-                if !was_blank {
-                    vec.push(&command[start_arg..end_arg]);
-                }
-                vec.push("|");
-                was_blank = true;
-                start_arg = end_arg + 1;
-                end_arg = start_arg;
+            '#' if in_quotes.is_none() => break,
+            '\'' | '"' if in_quotes.is_none() => in_quotes = Some(ch),
+            q if Some(q) == in_quotes => in_quotes = None,
+            '{' if in_quotes.is_none() => {
+                brace_depth += 1;
+                current.push(ch);
             }
-            '>' => {
-                if !was_blank {
-                    vec.push(&command[start_arg..end_arg]);
-                }
-                if let Some(&'=') = chars.peek() {
-                    chars.next();
-                    vec.push(">=");
-                    end_arg += 2;
-                } else if let Some(&'>') = chars.peek() {
-                    chars.next();
-                    vec.push(">>");
-                    end_arg += 2;
-                } else {
-                    vec.push(">");
-                    end_arg += 1;
-                }
-                was_blank = true;
-                start_arg = end_arg;
+            '}' if in_quotes.is_none() => {
+                brace_depth = (brace_depth as i32 - 1).max(0) as usize;
+                current.push(ch);
             }
-            '{' => {
-                if !was_blank && start_arg != end_arg {
-                    vec.push(&command[start_arg..end_arg]);
+
+            ' ' | '\t' | '|' | '>' if in_quotes.is_none() && brace_depth == 0 => {
+                if !current.is_empty() {
+                    args.extend(expand_braces(&current));
+                    current.clear();
                 }
-                start_arg = end_arg;
-                while let Some(next_ch) = chars.next() {
-                    end_arg+=1;
-                    if next_ch == '}' {
-                        break;
+                
+                if ch == '|' || ch == '>' {
+                    let mut op = ch.to_string();
+                    if let Some(&next) = chars.peek() {
+                        if ch == '>' && (next == '>' || next == '=') {
+                            op.push(chars.next().unwrap());
+                        }
                     }
+                    args.push(op);
                 }
-                if start_arg <= end_arg && start_arg < command.len() {
-                    vec.push(&command[start_arg..=end_arg]);
-                }
-                end_arg+=1;
-                start_arg=end_arg;
-                was_blank=true;
             }
-            '\'' | '"' => {
-                let quote_char = ch;
-                if !was_blank && start_arg != end_arg {
-                    vec.push(&command[start_arg..end_arg]);
-                }
-                start_arg = end_arg + 1; 
-                
-                while let Some(next_ch) = chars.next() {
-                    end_arg += 1;
-                    if next_ch == quote_char {
-                        break;
-                    }
-                }
-                
-                if start_arg <= end_arg && start_arg < command.len() {
-                    vec.push(&command[start_arg..end_arg]);
-                }
-                
-                end_arg += 1; 
-                start_arg = end_arg;
-                was_blank = true;
-            }
-            ' ' | '\t' => {
-                if !was_blank && start_arg != end_arg {
-                    vec.push(&command[start_arg..end_arg]);
-                }
-                was_blank = true;
-                end_arg += 1;
-                start_arg = end_arg;
-            }
-            _ => {
-                end_arg += 1;
-                was_blank = false;
-            }
+
+            _ => current.push(ch),
         }
     }
-    
-    if !was_blank && start_arg < end_arg && start_arg < command.len() {
-        vec.push(&command[start_arg..end_arg.min(command.len())]);
+
+    if !current.is_empty() {
+        args.extend(expand_braces(&current));
     }
-    
-    vec
+
+    args
 }
+
+fn expand_braces(input: &str) -> Vec<String> {
+    if let Some(start) = input.find('{') {
+        let mut depth = 0;
+        let mut end = None;
+
+        for (i, ch) in input.char_indices().skip(start) {
+            if ch == '{' { depth += 1; }
+            else if ch == '}' {
+                depth -= 1;
+                if depth == 0 {
+                    end = Some(i);
+                    break;
+                }
+            }
+        }
+
+        if let Some(end_idx) = end {
+            let prefix = &input[..start];
+            let suffix = &input[end_idx + 1..];
+            let content = &input[start + 1..end_idx];
+
+            let parts = split_brace_content(content);
+            let mut result = Vec::new();
+
+            for part in parts {
+                let full_word = format!("{}{}{}", prefix, part, suffix);
+                result.extend(expand_braces(&full_word));
+            }
+            return result;
+        }
+    }
+    vec![input.to_string()]
+}
+
+fn split_brace_content(content: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut depth = 0;
+
+    for ch in content.chars() {
+        if (ch == ',' || ch == ' ') && depth == 0 {
+            if !current.is_empty() {
+                parts.push(current.clone());
+                current.clear();
+            }
+        } else {
+            if ch == '{' { depth += 1; }
+            if ch == '}' { depth -= 1; }
+            current.push(ch);
+        }
+    }
+    if !current.is_empty() {
+        parts.push(current);
+    }
+    parts
+}
+
