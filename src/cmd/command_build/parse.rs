@@ -1,10 +1,9 @@
 use super::build::BuildError;
 use std::{
-    fs::{File, OpenOptions}, 
-    io::{self, PipeReader, Write}, 
-    path::Path
+    fs::{File, OpenOptions},
+    io::{self, PipeReader, Write},
+    path::Path,
 };
-
 
 pub struct CommandBackPack<'a> {
     pub stdout: Box<dyn Write + 'a>,
@@ -12,19 +11,17 @@ pub struct CommandBackPack<'a> {
 }
 
 pub enum InputFile<'a> {
-    Stdin, 
+    Stdin,
     Pipe(&'a PipeReader),
     File(&'a Path, &'a str),
 }
 
-
 impl<'a> CommandBackPack<'a> {
-    pub fn read_in_file(path: &Path, filename: &'a str) 
-            -> Result<File, BuildError<'a>> {
+    pub fn read_in_file(path: &Path, filename: &'a str) -> Result<File, BuildError<'a>> {
         let path = path.join(filename);
         match File::open(&path) {
             Ok(file) => Ok(file),
-            Err(e) => Err(BuildError::UnopenedFile(path ,e))
+            Err(e) => Err(BuildError::UnopenedFile(path, e)),
         }
     }
 
@@ -34,32 +31,37 @@ impl<'a> CommandBackPack<'a> {
         add_mode: bool,
     ) -> Result<Box<dyn Write + 'a>, BuildError<'a>> {
         let path = path.join(filename);
-            match OpenOptions::new()
-                .append(add_mode)
-                .write(true)
-                .create(true)
-                .truncate(!add_mode)
-                .open(&path)
-            {
-                Ok(file) => Ok(Box::new(file)),
-                Err(e) => Err(BuildError::UnopenedFile(path, e)),
-            }
+        match OpenOptions::new()
+            .append(add_mode)
+            .write(true)
+            .create(true)
+            .truncate(!add_mode)
+            .open(&path)
+        {
+            Ok(file) => Ok(Box::new(file)),
+            Err(e) => Err(BuildError::UnopenedFile(path, e)),
+        }
     }
 
-    pub fn get_next<'b>(args: &'b [&'a str], i: usize) 
-            -> Result<&'a str, BuildError<'a>> {
+    pub fn get_next<'b>(args: &'b [&'a str], i: usize) -> Result<&'a str, BuildError<'a>> {
         if i + 1 >= args.len() {
             Err(BuildError::NoArgument(args[i]))
         } else {
-            Ok(args[i+1])
+            Ok(args[i + 1])
         }
     }
-    
-    pub fn new(args: Vec<&'a str>, path: &Path) 
-        -> Result<
-            (Self, Vec<&'a str>, (Option<PipeReader>, Option<Vec<&'a str>>)), 
-            BuildError<'a>
-        >{
+
+    pub fn new(
+        args: Vec<&'a str>,
+        path: &Path,
+    ) -> Result<
+        (
+            Self,
+            Vec<&'a str>,
+            (Option<PipeReader>, Option<Vec<&'a str>>),
+        ),
+        BuildError<'a>,
+    > {
         let mut args_left = Vec::new();
         let mut i: usize = 1;
         let mut stdout_name = None;
@@ -71,50 +73,57 @@ impl<'a> CommandBackPack<'a> {
             match args[i] {
                 ">" | "--output" | "-out" => {
                     stdout_name = Some(Self::get_next(&args, i)?);
-                    i+=1;
+                    i += 1;
                 }
                 ">>" => {
                     stdout_name = Some(Self::get_next(&args, i)?);
-                    i+=1;
+                    i += 1;
                     add_mode = true;
                 }
                 "|" | "--pipe" | "--pipe-mode" => {
-                    if i+1 < args.len() {
-                        pipe_part.1 = Some(Vec::from(&args[i+1..]));
+                    if i + 1 < args.len() {
+                        pipe_part.1 = Some(Vec::from(&args[i + 1..]));
                         break;
-                    } 
+                    }
                 }
                 "--err" | "--stderr" | "2>" | "--error" => {
                     stderr_name = Some(Self::get_next(&args, i)?);
-                    i+=1;
+                    i += 1;
                 }
                 "2>>" => {
                     stderr_name = Some(Self::get_next(&args, i)?);
-                    i+=1;
-                    err_add_mode=true;
+                    i += 1;
+                    err_add_mode = true;
                 }
                 "-add" | "--add-mode" => add_mode = true,
-                _=> args_left.push(args[i])
+                _ => args_left.push(args[i]),
             }
-            i+=1;
-        } 
-        Ok((Self {
-            stderr: if let Some(name) = stderr_name {
-                Box::new(Self::read_out_file(path, name, err_add_mode)?)
-            } else {Box::new(io::stderr())},
-            stdout: if pipe_part.1.is_some() {
-                match io::pipe() {
-                    Ok((pipe_re, pipe_wr)) => {
-                        pipe_part.0 = Some(pipe_re);
-                        Box::new(pipe_wr)
+            i += 1;
+        }
+        Ok((
+            Self {
+                stderr: if let Some(name) = stderr_name {
+                    Box::new(Self::read_out_file(path, name, err_add_mode)?)
+                } else {
+                    Box::new(io::stderr())
+                },
+                stdout: if pipe_part.1.is_some() {
+                    match io::pipe() {
+                        Ok((pipe_re, pipe_wr)) => {
+                            pipe_part.0 = Some(pipe_re);
+                            Box::new(pipe_wr)
+                        }
+                        Err(e) => return Err(BuildError::PipeError(e)),
                     }
-                    Err(e) => return Err(BuildError::PipeError(e))
-                } 
-            }
-            else if let Some(name) = stdout_name {
-                Box::new(Self::read_out_file(path, name, add_mode)?) 
-            } else {Box::new(io::stdout())}
-        }, args_left, pipe_part))
+                } else if let Some(name) = stdout_name {
+                    Box::new(Self::read_out_file(path, name, add_mode)?)
+                } else {
+                    Box::new(io::stdout())
+                },
+            },
+            args_left,
+            pipe_part,
+        ))
     }
 }
 
@@ -144,13 +153,15 @@ pub fn split_args(command: &str) -> Vec<String> {
                     args.extend(expand_braces(&current));
                     current.clear();
                 }
-                
+
                 if ch == '|' || ch == '>' {
                     let mut op = ch.to_string();
-                    if let Some(&next) = chars.peek() 
-                        && ch == '>' && (next == '>' || next == '='){
-                            op.push(chars.next().unwrap());
-                        }
+                    if let Some(&next) = chars.peek()
+                        && ch == '>'
+                        && (next == '>' || next == '=')
+                    {
+                        op.push(chars.next().unwrap());
+                    }
                     args.push(op);
                 }
             }
@@ -172,8 +183,9 @@ fn expand_braces(input: &str) -> Vec<String> {
         let mut end = None;
 
         for (i, ch) in input.char_indices().skip(start) {
-            if ch == '{' { depth += 1; }
-            else if ch == '}' {
+            if ch == '{' {
+                depth += 1;
+            } else if ch == '}' {
                 depth -= 1;
                 if depth == 0 {
                     end = Some(i);
@@ -212,8 +224,12 @@ fn split_brace_content(content: &str) -> Vec<String> {
                 current.clear();
             }
         } else {
-            if ch == '{' { depth += 1; }
-            if ch == '}' { depth -= 1; }
+            if ch == '{' {
+                depth += 1;
+            }
+            if ch == '}' {
+                depth -= 1;
+            }
             current.push(ch);
         }
     }
@@ -222,4 +238,3 @@ fn split_brace_content(content: &str) -> Vec<String> {
     }
     parts
 }
-

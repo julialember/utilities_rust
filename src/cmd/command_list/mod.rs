@@ -11,5 +11,5 @@ pub use {
     head_tail::{HeadTail, HeadTailError},
     ls::{Ls, LsError},
     mkdir::{Mkdir, MkdirError},
-    rm::{Rm, RmError}, 
+    rm::{Rm, RmError},
 };

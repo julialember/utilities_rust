@@ -1,17 +1,19 @@
-use std::{
-    env, fs::{self, File, OpenOptions}, 
-    io::{self, Write, stdin, stdout},
-    path::PathBuf, sync::{Arc, Mutex, RwLock}, 
-    thread::{self, JoinHandle}
-};
 use cmd::command_work::todo;
+use std::{
+    env,
+    fs::{self, File, OpenOptions},
+    io::{self, Write, stdin, stdout},
+    path::PathBuf,
+    sync::{Arc, Mutex, RwLock},
+    thread::{self, JoinHandle},
+};
 
-fn report_code(command: &str, code: bool, shu_his: Arc<Mutex<File>>) -> io::Result<()>{
-    if !code{
+fn report_code(command: &str, code: bool, shu_his: Arc<Mutex<File>>) -> io::Result<()> {
+    if !code {
         println!("ERROR!\nexit code: 1")
     };
     if let Ok(mut f) = shu_his.lock() {
-        writeln!(f, "{} {}", command, if code {""} else {"ERROR"})?
+        writeln!(f, "{} {}", command, if code { "" } else { "ERROR" })?
     }
     Ok(())
 }
@@ -20,22 +22,20 @@ fn process_terminated() {
     println!("tranks for using our terminal!");
 }
 
-//TODO cross-platform 
-//TODO tests 
+//TODO cross-platform
+//TODO tests
 //TODO pass programm for modules
 
-fn showdir(now_dir: &Arc<RwLock<PathBuf>>, fulldir: bool) -> bool{
-    if let Ok(pth) = now_dir.read() { 
+fn showdir(now_dir: &Arc<RwLock<PathBuf>>, fulldir: bool) -> bool {
+    if let Ok(pth) = now_dir.read() {
         if fulldir {
             println!("{}", pth.display());
-        }
-        else if let Some(name) = pth.file_stem() {
+        } else if let Some(name) = pth.file_stem() {
             print!("[{}]~$ ", name.display());
-        }
-        else {
+        } else {
             print!("[???]~$ ");
         }
-        let _ =stdout().flush();
+        let _ = stdout().flush();
         true
     } else {
         false
@@ -45,10 +45,12 @@ fn showdir(now_dir: &Arc<RwLock<PathBuf>>, fulldir: bool) -> bool{
 fn full_dir(now_dir: &Arc<RwLock<PathBuf>>) -> Option<PathBuf> {
     if let Ok(path) = now_dir.read() {
         Some(path.clone())
-    } else {None}
+    } else {
+        None
+    }
 }
 
-enum NewDir<'a>  {
+enum NewDir<'a> {
     StrDir(&'a str),
     PathDir(PathBuf),
 }
@@ -69,10 +71,11 @@ fn changedir(now_dir: &Arc<RwLock<PathBuf>>, new_dir: NewDir) -> bool {
             NewDir::PathDir(new_dir) => {
                 *path = new_dir;
                 true
-            },
-            
+            }
         }
-    }else {false}
+    } else {
+        false
+    }
 }
 
 fn clear_history() -> io::Result<()> {
@@ -80,14 +83,15 @@ fn clear_history() -> io::Result<()> {
     Ok(())
 }
 
-fn main() -> io::Result<()> { 
+fn main() -> io::Result<()> {
     let mut command = String::new();
-    let shu_his = 
-        Arc::new(Mutex::new(OpenOptions::new()
-        .create(true)
-        .append(true)
-        .read(true)
-        .open(".shu_history")?));
+    let shu_his = Arc::new(Mutex::new(
+        OpenOptions::new()
+            .create(true)
+            .append(true)
+            .read(true)
+            .open(".shu_history")?,
+    ));
     let mut threads: Vec<JoinHandle<()>> = Vec::new();
     let mut thread_mode = false;
     let now_dir = Arc::new(RwLock::new(env::current_dir()?));
@@ -97,13 +101,15 @@ fn main() -> io::Result<()> {
             iter = 0;
             threads.retain(|th| th.is_finished());
         }
-        iter+=1;
-        
+        iter += 1;
+
         showdir(&now_dir, false);
-        let _= stdin().read_line(&mut command);
+        let _ = stdin().read_line(&mut command);
 
         let mut command_tr = command.trim();
-        if command_tr.is_empty() {continue;}
+        if command_tr.is_empty() {
+            continue;
+        }
         if command_tr.ends_with('&') {
             thread_mode = true;
             command_tr = command_tr.trim_matches('&');
@@ -117,10 +123,10 @@ fn main() -> io::Result<()> {
                 continue;
             };
             code = true;
-            let shu_arc= Arc::clone(&shu_his);
+            let shu_arc = Arc::clone(&shu_his);
             let now_dir_arc = Arc::clone(&now_dir);
             match trimmed_command {
-                "exit"=> {
+                "exit" => {
                     process_terminated();
                     report_code("exit", true, shu_arc)?;
                     break 'mainloop;
@@ -137,7 +143,7 @@ fn main() -> io::Result<()> {
                         }
                     }
                     report_code("history", code, shu_arc)?;
-                },
+                }
                 "clearHIS" => {
                     let code = clear_history().is_ok();
                     report_code("clearHis", code, shu_arc)?;
@@ -151,10 +157,14 @@ fn main() -> io::Result<()> {
                     code = match i.split_once(' ') {
                         Some((_, new_dir)) if !new_dir.is_empty() => {
                             changedir(&now_dir, NewDir::StrDir(new_dir))
-                        } 
-                        _ => if let Some(home) = env::home_dir() {
-                            changedir(&now_dir, NewDir::PathDir(home))
-                        } else {false}
+                        }
+                        _ => {
+                            if let Some(home) = env::home_dir() {
+                                changedir(&now_dir, NewDir::PathDir(home))
+                            } else {
+                                false
+                            }
+                        }
                     };
                     report_code(i, code, shu_arc)?;
                 }
@@ -163,26 +173,30 @@ fn main() -> io::Result<()> {
                     report_code("pwd", code, shu_arc)?;
                 }
 
-                _ => if !thread_mode {
-                    code = todo(trimmed_command, dir_clone);
-                    report_code(trimmed_command, code, shu_arc)?;
-                } else {
-                    let command_clone = trimmed_command.to_owned();
-                    let thread_shu = Arc::clone(&shu_his);
-                    let thread_dir = Arc::clone(&now_dir);
-                    let answer = thread::spawn(move || {
-                        let code = todo(&command_clone, dir_clone);
-                        if let Err(e) = report_code(&command_clone, code, thread_shu) {
-                            eprintln!("shu: error with write: {}", e);
-                        }
-                        println!("ghost process ends: {}", &command_clone); 
-                        showdir(&thread_dir, false);
-                    });
-                    threads.push(answer);
-                    thread_mode=false;
+                _ => {
+                    if !thread_mode {
+                        code = todo(trimmed_command, dir_clone);
+                        report_code(trimmed_command, code, shu_arc)?;
+                    } else {
+                        let command_clone = trimmed_command.to_owned();
+                        let thread_shu = Arc::clone(&shu_his);
+                        let thread_dir = Arc::clone(&now_dir);
+                        let answer = thread::spawn(move || {
+                            let code = todo(&command_clone, dir_clone);
+                            if let Err(e) = report_code(&command_clone, code, thread_shu) {
+                                eprintln!("shu: error with write: {}", e);
+                            }
+                            println!("ghost process ends: {}", &command_clone);
+                            showdir(&thread_dir, false);
+                        });
+                        threads.push(answer);
+                        thread_mode = false;
+                    }
                 }
             }
-            if !code {break;}
+            if !code {
+                break;
+            }
         }
         command.clear();
     }
@@ -190,7 +204,6 @@ fn main() -> io::Result<()> {
         if thread.join().is_err() {
             eprintln!("error with thread")
         }
-    };
+    }
     Ok(())
 }
-

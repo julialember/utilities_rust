@@ -1,28 +1,31 @@
 use std::{
-    fmt, 
-    fs::{self, DirEntry}, 
-    io::{self, PipeReader, Write}, 
-    os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt}, 
-    path::{Path, PathBuf}
+    fmt,
+    fs::{self, DirEntry},
+    io::{self, PipeReader, Write},
+    os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt},
+    path::{Path, PathBuf},
 };
 
 use crate::command_build::{
+    build::{BuildError, CommandBuild},
     command::{Command, CommandError},
     parse::CommandBackPack,
-    build::{CommandBuild, BuildError}
 };
 
 pub struct Ls {
     dire: PathBuf,
-    show_hide: bool, 
+    show_hide: bool,
     classify: bool,
     full_info: bool,
     show_hide_and: bool,
 }
 
 impl<'a> CommandBuild<'a, LsError> for Ls {
-fn new_obj(args: Vec<&'a str>, path: &'a Path, _p:Option<&'a PipeReader>) 
-    -> Result<Box<dyn Command<'a, LsError> + 'a>, CommandError<'a, LsError>> {
+    fn new_obj(
+        args: Vec<&'a str>,
+        path: &'a Path,
+        _p: Option<&'a PipeReader>,
+    ) -> Result<Box<dyn Command<'a, LsError> + 'a>, CommandError<'a, LsError>> {
         let mut i = 0;
         let mut dir: Option<PathBuf> = None;
         let mut show_hide = false;
@@ -36,75 +39,100 @@ fn new_obj(args: Vec<&'a str>, path: &'a Path, _p:Option<&'a PipeReader>)
                         Self::help();
                         return Err(CommandError::Help);
                     }
-                    "-F" | "--classify" => classify = true, 
+                    "-F" | "--classify" => classify = true,
                     "-l" | "--long-format" => full_info = true,
                     "-a" | "-all" => show_hide = true,
                     "-A" | "--almost-all" => show_hide_and = true,
                     _ => return Err(CommandError::BuildError(BuildError::UnexpectedArg(args[i]))),
                 }
-            }
-            else {
+            } else {
                 dir = Some(path.join(args[i]));
             }
             i += 1;
         }
         Ok(Box::new(Self {
-                show_hide,
-                show_hide_and,
-                full_info,
-                classify,
-                dire: if let Some(dir) = dir {dir} else {path.join(".")},
-            }
-        ))
+            show_hide,
+            show_hide_and,
+            full_info,
+            classify,
+            dire: if let Some(dir) = dir {
+                dir
+            } else {
+                path.join(".")
+            },
+        }))
     }
 }
 
-
 impl<'a> Command<'a, LsError> for Ls {
-    fn run(mut self: Box<Self>, output: &mut CommandBackPack) 
-            -> Result<bool, CommandError<'a, LsError>> {
-        if self.show_hide && !self.show_hide_and{
+    fn run(
+        mut self: Box<Self>,
+        output: &mut CommandBackPack,
+    ) -> Result<bool, CommandError<'a, LsError>> {
+        if self.show_hide && !self.show_hide_and {
             if self.full_info {
                 Self::print_info(".".into(), &mut output.stdout)?;
                 Self::print_info("..".into(), &mut output.stdout)?;
             } else {
-                writeln!(output.stdout, "{}", if self.classify {"./\n../"} else {".\n.."})?;
+                writeln!(
+                    output.stdout,
+                    "{}",
+                    if self.classify { "./\n../" } else { ".\n.." }
+                )?;
             }
-        } else if self.show_hide_and && !self.show_hide{
-            self.show_hide = true; 
+        } else if self.show_hide_and && !self.show_hide {
+            self.show_hide = true;
         }
         if self.dire.is_dir() {
             match fs::read_dir(&self.dire) {
                 Ok(dir) => {
                     for ent in dir.filter_map(Result::ok) {
-                        if let Some(name) = ent.path().file_name() &&
-                        let Some(name) = name.to_str() {
+                        if let Some(name) = ent.path().file_name()
+                            && let Some(name) = name.to_str()
+                        {
                             if name.starts_with('.') {
                                 if self.show_hide {
                                     if self.full_info {
                                         Self::print_info(ent.path(), &mut output.stdout)?;
-                                    }
-                                    else {
+                                    } else {
                                         write!(output.stdout, "{}", name)?;
-                                        writeln!(output.stdout, "{}", 
-                                            if self.classify {Self::classify(&ent)} else {' '})?;
+                                        writeln!(
+                                            output.stdout,
+                                            "{}",
+                                            if self.classify {
+                                                Self::classify(&ent)
+                                            } else {
+                                                ' '
+                                            }
+                                        )?;
                                     }
                                 }
                             } else if self.full_info {
-                                Self::print_info(ent.path(), &mut output.stdout)?; 
+                                Self::print_info(ent.path(), &mut output.stdout)?;
                             } else {
                                 write!(output.stdout, "{}", name)?;
-                                writeln!(output.stdout, "{}", 
-                                    if self.classify {Self::classify(&ent)} else {' '})?;
+                                writeln!(
+                                    output.stdout,
+                                    "{}",
+                                    if self.classify {
+                                        Self::classify(&ent)
+                                    } else {
+                                        ' '
+                                    }
+                                )?;
                             }
-                        } 
-                    } 
-                },
-                Err(e) =>
-                    return Err(CommandError::Other("ls", LsError::ReadDirError(self.dire, e)))
-           }
+                        }
+                    }
+                }
+                Err(e) => {
+                    return Err(CommandError::Other(
+                        "ls",
+                        LsError::ReadDirError(self.dire, e),
+                    ));
+                }
+            }
         } else {
-            return Err(CommandError::Other("ls", LsError::NotDir(self.dire)))
+            return Err(CommandError::Other("ls", LsError::NotDir(self.dire)));
         }
         Ok(true)
     }
@@ -130,8 +158,6 @@ impl<'a> Command<'a, LsError> for Ls {
         println!("  ls -a                      List all files, including hidden ones");
         println!("  ls -A /home/user           List all files in a directory, except '.' and '..'");
     }
-
-    
 }
 
 impl<'a> Ls {
@@ -165,23 +191,24 @@ impl<'a> Ls {
         let gid = metadata.gid();
         let size = metadata.len();
 
-
-        write!(outfile,
-            "{} {:>2} {} {} {:>5} {}", perms, nlink, uid, gid, size, " ")?;
-        if let Some(name) = 
-            path.file_name() && 
-            let Some(name) = name.to_str() {
-            writeln!(outfile, "{}", name)     
+        write!(
+            outfile,
+            "{} {:>2} {} {} {:>5} {}",
+            perms, nlink, uid, gid, size, " "
+        )?;
+        if let Some(name) = path.file_name()
+            && let Some(name) = name.to_str()
+        {
+            writeln!(outfile, "{}", name)
         } else {
             writeln!(outfile, "{}", path.display())
         }
     }
 
-
     fn classify(path: &DirEntry) -> char {
         let metadata = match path.path().symlink_metadata() {
             Ok(m) => m,
-            Err(_) => return ' ', 
+            Err(_) => return ' ',
         };
 
         let file_type = metadata.file_type();
@@ -211,8 +238,8 @@ impl<'a> Ls {
         false
     }
 }
-    
-pub enum LsError{
+
+pub enum LsError {
     NotDir(PathBuf),
     ReadDirError(PathBuf, io::Error),
 }
@@ -221,8 +248,9 @@ impl fmt::Display for LsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NotDir(d) => write!(f, "not the dir: {}", d.display()),
-            Self::ReadDirError(d, e) =>
-                write!(f, "error with reading dire ({}): {}", d.display(), e),
+            Self::ReadDirError(d, e) => {
+                write!(f, "error with reading dire ({}): {}", d.display(), e)
+            }
         }
     }
 }

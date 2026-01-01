@@ -1,13 +1,13 @@
 use std::{
-    fmt, 
-    io::{self, BufRead, BufReader, PipeReader, Read, Write}, 
-    path::Path
+    fmt,
+    io::{self, BufRead, BufReader, PipeReader, Read, Write},
+    path::Path,
 };
 
 use crate::command_build::{
+    build::{BuildError, CommandBuild},
     command::{Command, CommandError},
     parse::{CommandBackPack, InputFile},
-    build::{CommandBuild, BuildError}
 };
 
 pub struct Grep<'a> {
@@ -19,8 +19,11 @@ pub struct Grep<'a> {
 }
 
 impl<'a> CommandBuild<'a, GrepError> for Grep<'a> {
-fn new_obj(args: Vec<&'a str>, path: &'a Path, pipe: Option<&'a PipeReader>)
-        -> Result<Box<dyn Command<'a, GrepError> + 'a>, CommandError<'a, GrepError>> {
+    fn new_obj(
+        args: Vec<&'a str>,
+        path: &'a Path,
+        pipe: Option<&'a PipeReader>,
+    ) -> Result<Box<dyn Command<'a, GrepError> + 'a>, CommandError<'a, GrepError>> {
         let mut i = 0;
         let mut pattern: Option<&str> = None;
         let mut input_files: Vec<InputFile> = Vec::new();
@@ -38,36 +41,32 @@ fn new_obj(args: Vec<&'a str>, path: &'a Path, pipe: Option<&'a PipeReader>)
                         match CommandBackPack::get_next(&args, i) {
                             Ok(res) => {
                                 input_files.push(InputFile::File(path, res));
-                                i+=1;
-                            }
-                            Err(e) => return Err(CommandError::BuildError(e))
-                        }
-                    }
-                    "-p" | "--pattern" | "--pat"  => {
-                        match CommandBackPack::get_next(&args, i) {
-                            Ok(res) => {
-                                pattern = Some(res);
-                                i+=1;
+                                i += 1;
                             }
                             Err(e) => return Err(CommandError::BuildError(e)),
                         }
                     }
+                    "-p" | "--pattern" | "--pat" => match CommandBackPack::get_next(&args, i) {
+                        Ok(res) => {
+                            pattern = Some(res);
+                            i += 1;
+                        }
+                        Err(e) => return Err(CommandError::BuildError(e)),
+                    },
                     "-c" | "--count" | "--count-lines" => count = true,
                     "-he" | "--help" | "--help-mode" => {
                         Self::help();
                         return Err(CommandError::Help);
                     }
-                    "-n" | "-ln"       | "--line-number" => line_number = true,
+                    "-n" | "-ln" | "--line-number" => line_number = true,
                     "-i" | "--ignore-case" | "--ignore" => ignore_case = true,
                     _ => return Err(CommandError::BuildError(BuildError::UnexpectedArg(args[i]))),
                 }
-            }
-            else if pattern.is_none() {
+            } else if pattern.is_none() {
                 pattern = Some(args[i]);
-            } 
-            else {
+            } else {
                 input_files.push(InputFile::File(path, args[i]))
-            }           
+            }
             i += 1;
         }
         match pattern {
@@ -78,44 +77,52 @@ fn new_obj(args: Vec<&'a str>, path: &'a Path, pipe: Option<&'a PipeReader>)
                 line_number,
                 ignore_case,
                 input_files,
-            }
-        ))}
+            })),
+        }
     }
 }
 
 impl<'a> Grep<'a> {
     fn match_pattern(line: &str, pattern: &str, ignore_case: bool) -> bool {
         if ignore_case {
-            line.to_lowercase().contains(pattern) 
+            line.to_lowercase().contains(pattern)
         } else {
             line.contains(pattern)
         }
     }
-    fn print_out(
-        &self, 
-        output: &mut CommandBackPack, 
-        file: Box<dyn Read+'a>) -> io::Result<()> {
+    fn print_out(&self, output: &mut CommandBackPack, file: Box<dyn Read + 'a>) -> io::Result<()> {
         let buffer = BufReader::new(file);
         if self.count {
-            writeln!(output.stdout, "{}",  
-                buffer.lines().map_while(Result::ok).filter(|line| 
-                        Self::match_pattern(line, &self.pattern, self.ignore_case)).count())?;
-        } 
-        else {
+            writeln!(
+                output.stdout,
+                "{}",
+                buffer
+                    .lines()
+                    .map_while(Result::ok)
+                    .filter(|line| Self::match_pattern(line, &self.pattern, self.ignore_case))
+                    .count()
+            )?;
+        } else {
             for (numero, line) in buffer.lines().map_while(Result::ok).enumerate() {
-            if Self::match_pattern(&line, &self.pattern, self.ignore_case){
-                let line = if self.line_number {format!("{}. {}\n", numero+1, line)} 
-                    else {format!("{}\n", line)};
-                output.stdout.write_all(line.as_bytes())?;
+                if Self::match_pattern(&line, &self.pattern, self.ignore_case) {
+                    let line = if self.line_number {
+                        format!("{}. {}\n", numero + 1, line)
+                    } else {
+                        format!("{}\n", line)
+                    };
+                    output.stdout.write_all(line.as_bytes())?;
                 }
             }
         }
         Ok(())
-    } 
+    }
 }
 
 impl<'a> Command<'a, GrepError> for Grep<'a> {
-    fn run(mut self: Box<Self>, output: &mut CommandBackPack) -> Result<bool, CommandError<'a, GrepError>> {
+    fn run(
+        mut self: Box<Self>,
+        output: &mut CommandBackPack,
+    ) -> Result<bool, CommandError<'a, GrepError>> {
         let mut exit_code = true;
         if self.ignore_case {
             self.pattern = self.pattern.to_lowercase()
@@ -132,32 +139,30 @@ impl<'a> Command<'a, GrepError> for Grep<'a> {
             Self::print_out(&self, output, file)?;
         }
         Ok(exit_code)
-} 
+    }
 
-fn help() {
-    println!("Search for PATTERN in each FILE or standard input.");
-    println!();
-    println!("USAGE:");
-    println!("  grep [OPTIONS] PATTERN [FILE]...");
-    println!();
-    println!("If FILE is '-' or omitted, read from standard input.");
-    println!();
-    println!("OPTIONS:");
-    println!("  -i, --ignore-case           ignore case distinctions");
-    println!("  -n, --line-number           print line number with output lines");
-    println!("  -c, --count                 print only a count of matching lines");
-    println!("  -f, --from FILE             search PATTERN in FILE");
-    println!("  -he, --help                 display this help and exit");
-    println!();
-    println!("EXAMPLES:");
-    println!("  grep error log.txt          Search 'error' in log.txt");
-    println!("  grep -n pattern file        Show matching lines with numbers");
-    println!("  grep -c error file          Count lines containing 'error'");
+    fn help() {
+        println!("Search for PATTERN in each FILE or standard input.");
+        println!();
+        println!("USAGE:");
+        println!("  grep [OPTIONS] PATTERN [FILE]...");
+        println!();
+        println!("If FILE is '-' or omitted, read from standard input.");
+        println!();
+        println!("OPTIONS:");
+        println!("  -i, --ignore-case           ignore case distinctions");
+        println!("  -n, --line-number           print line number with output lines");
+        println!("  -c, --count                 print only a count of matching lines");
+        println!("  -f, --from FILE             search PATTERN in FILE");
+        println!("  -he, --help                 display this help and exit");
+        println!();
+        println!("EXAMPLES:");
+        println!("  grep error log.txt          Search 'error' in log.txt");
+        println!("  grep -n pattern file        Show matching lines with numbers");
+        println!("  grep -c error file          Count lines containing 'error'");
+    }
 }
 
-    
-}
-    
 pub enum GrepError {
     NoPattern,
 }
@@ -169,6 +174,3 @@ impl fmt::Display for GrepError {
         }
     }
 }
-
-
-

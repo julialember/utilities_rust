@@ -1,32 +1,32 @@
 use std::{
     collections::VecDeque,
     fmt,
-    io::{BufRead, BufReader, PipeReader, Write}, 
+    io::{BufRead, BufReader, PipeReader, Write},
     path::Path,
 };
-
 
 pub enum HeadTailError<'a> {
     ParseError(&'a str),
 }
 
 use crate::command_build::{
+    build::{BuildError, CommandBuild},
     command::{Command, CommandError},
     parse::{CommandBackPack, InputFile},
-    build::{CommandBuild, BuildError}
 };
-
 
 pub struct HeadTail<'a> {
     mode: bool,
     skip_empty: bool,
     count: usize,
-    input_files: Vec<InputFile<'a>> 
+    input_files: Vec<InputFile<'a>>,
 }
 
 impl<'a> Command<'a, HeadTailError<'a>> for HeadTail<'a> {
-    fn run(self: Box<Self>, output: &mut CommandBackPack) 
-            -> Result<bool, CommandError<'a, HeadTailError<'a>>> {
+    fn run(
+        self: Box<Self>,
+        output: &mut CommandBackPack,
+    ) -> Result<bool, CommandError<'a, HeadTailError<'a>>> {
         let mut exit_code = false;
         for file in self.input_files.iter() {
             let reader = match Self::input_type(file) {
@@ -40,7 +40,7 @@ impl<'a> Command<'a, HeadTailError<'a>> for HeadTail<'a> {
             if self.mode {
                 for line in reader
                     .lines()
-                    .map_while(Result::ok) 
+                    .map_while(Result::ok)
                     .filter(|l| !(self.skip_empty && l.is_empty()))
                     .take(self.count)
                 {
@@ -64,7 +64,7 @@ impl<'a> Command<'a, HeadTailError<'a>> for HeadTail<'a> {
         }
         Ok(exit_code)
     }
-    
+
     fn help() {
         println!("Display first or last lines of FILE(s) to standard output.");
         println!();
@@ -91,9 +91,13 @@ impl<'a> Command<'a, HeadTailError<'a>> for HeadTail<'a> {
     }
 }
 
-impl<'a> CommandBuild<'a, HeadTailError<'a>> for HeadTail<'a>  {
-fn new_obj(args: Vec<&'a str>, path: &'a Path, pipe: Option<&'a PipeReader>) -> 
-    Result<Box<dyn Command<'a, HeadTailError<'a>> + 'a>, CommandError<'a, HeadTailError<'a>>> {
+impl<'a> CommandBuild<'a, HeadTailError<'a>> for HeadTail<'a> {
+    fn new_obj(
+        args: Vec<&'a str>,
+        path: &'a Path,
+        pipe: Option<&'a PipeReader>,
+    ) -> Result<Box<dyn Command<'a, HeadTailError<'a>> + 'a>, CommandError<'a, HeadTailError<'a>>>
+    {
         let mut i = 0;
         let mut mode: bool = true;
         let mut input_files = Vec::new();
@@ -119,7 +123,7 @@ fn new_obj(args: Vec<&'a str>, path: &'a Path, pipe: Option<&'a PipeReader>) ->
                             return Err(CommandError::BuildError(BuildError::NoArgument(args[i])));
                         } else {
                             i += 1;
-                            count = Self::parse_arg(args[i])?;      
+                            count = Self::parse_arg(args[i])?;
                         }
                     }
                     "-t" | "--tail-mode" => mode = false,
@@ -142,16 +146,17 @@ fn new_obj(args: Vec<&'a str>, path: &'a Path, pipe: Option<&'a PipeReader>) ->
             skip_empty,
             input_files,
         }))
- 
     }
 }
 
 impl<'a> HeadTail<'a> {
-    fn parse_arg(arg: &'a str) -> Result<usize, CommandError<'a, HeadTailError<'a>>>{
+    fn parse_arg(arg: &'a str) -> Result<usize, CommandError<'a, HeadTailError<'a>>> {
         match arg.parse::<usize>() {
             Ok(num) => Ok(num),
-            Err(_) => Err(CommandError
-              ::Other("head-tail", HeadTailError::ParseError(arg))),
+            Err(_) => Err(CommandError::Other(
+                "head-tail",
+                HeadTailError::ParseError(arg),
+            )),
         }
     }
 }
@@ -159,7 +164,7 @@ impl<'a> HeadTail<'a> {
 impl fmt::Display for HeadTailError<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::ParseError(s) => writeln!(f, "can't parse argument: {}", s)
+            Self::ParseError(s) => writeln!(f, "can't parse argument: {}", s),
         }
     }
 }

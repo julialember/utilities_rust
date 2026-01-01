@@ -1,13 +1,13 @@
 use std::{
-    fmt, 
-    io::{self, BufRead, BufReader, PipeReader, Read, Write}, 
-    path::Path
+    fmt,
+    io::{self, BufRead, BufReader, PipeReader, Read, Write},
+    path::Path,
 };
 
 use crate::command_build::{
+    build::{BuildError, CommandBuild},
     command::{Command, CommandError},
     parse::{CommandBackPack, InputFile},
-    build::{CommandBuild, BuildError}
 };
 
 pub struct Cat<'a> {
@@ -20,11 +20,12 @@ pub struct Cat<'a> {
 
 impl<'a> Cat<'a> {
     fn print_out(
-        &self, 
-        output: &mut CommandBackPack, 
-        mut last_blank: bool, 
-        file: Box<dyn Read + 'a>, 
-        index: &mut usize) -> io::Result<bool> {
+        &self,
+        output: &mut CommandBackPack,
+        mut last_blank: bool,
+        file: Box<dyn Read + 'a>,
+        index: &mut usize,
+    ) -> io::Result<bool> {
         let buffer = BufReader::new(file);
         for line in buffer.lines().map_while(Result::ok) {
             if self.squize_blank && line.trim().is_empty() {
@@ -33,21 +34,31 @@ impl<'a> Cat<'a> {
                 } else {
                     last_blank = true;
                 }
-            } else {last_blank = false}                                
+            } else {
+                last_blank = false
+            }
 
             if self.line_number || (self.count_non_empty && !line.is_empty()) {
                 write!(output.stdout, "{}. ", index)?;
-                *index+=1;
-            } 
-            writeln!(output.stdout, "{}{}", line, if self.show_end {"$"} else {""})?;
-        } 
+                *index += 1;
+            }
+            writeln!(
+                output.stdout,
+                "{}{}",
+                line,
+                if self.show_end { "$" } else { "" }
+            )?;
+        }
         Ok(last_blank)
-    } 
+    }
 }
 
 impl<'a> CommandBuild<'a, CatError> for Cat<'a> {
-fn new_obj(args: Vec<&'a str>, path: &'a Path, pipe: Option<&'a PipeReader>)
-    -> Result<Box<dyn Command<'a, CatError> + 'a>, CommandError<'a, CatError>> {
+    fn new_obj(
+        args: Vec<&'a str>,
+        path: &'a Path,
+        pipe: Option<&'a PipeReader>,
+    ) -> Result<Box<dyn Command<'a, CatError> + 'a>, CommandError<'a, CatError>> {
         let mut i = 0;
         let mut input_files: Vec<InputFile> = Vec::new();
         if let Some(pipe) = pipe {
@@ -65,10 +76,10 @@ fn new_obj(args: Vec<&'a str>, path: &'a Path, pipe: Option<&'a PipeReader>)
                         match CommandBackPack::get_next(&args, i) {
                             Ok(res) => {
                                 input_files.push(InputFile::File(path, res));
-                                i+=1 
+                                i += 1
                             }
-                            Err(e) =>  return Err(CommandError::BuildError(e)),
-                        } 
+                            Err(e) => return Err(CommandError::BuildError(e)),
+                        }
                     }
                     "-he" | "--help" | "--help-mode" => {
                         Self::help();
@@ -80,32 +91,34 @@ fn new_obj(args: Vec<&'a str>, path: &'a Path, pipe: Option<&'a PipeReader>)
                     "-s" | "--squeze" => squize_blank = true,
                     _ => return Err(CommandError::BuildError(BuildError::UnexpectedArg(args[i]))),
                 }
-            }
-            else {input_files.push(InputFile::File(path, args[i]))};
+            } else {
+                input_files.push(InputFile::File(path, args[i]))
+            };
             i += 1;
         }
         if line_number && count_non_empty {
             line_number = false;
         }
         Ok(Box::new(Self {
-                line_number, 
-                count_non_empty,
-                show_end,
-                squize_blank,
-                input_files,
-            }
-        ))
+            line_number,
+            count_non_empty,
+            show_end,
+            squize_blank,
+            input_files,
+        }))
     }
 }
 
 impl<'a> Command<'a, CatError> for Cat<'a> {
-    fn run(mut self: Box<Self>, output: &mut CommandBackPack) 
-            -> Result<bool, CommandError<'a, CatError>> {
+    fn run(
+        mut self: Box<Self>,
+        output: &mut CommandBackPack,
+    ) -> Result<bool, CommandError<'a, CatError>> {
         let mut exit_code = true;
         let mut last_blank = false;
         if self.input_files.is_empty() {
             self.input_files.push(InputFile::Stdin);
-        } ;
+        };
         for file in self.input_files.iter() {
             let mut index: usize = 0;
             let file = match Self::input_type(file) {
@@ -116,11 +129,11 @@ impl<'a> Command<'a, CatError> for Cat<'a> {
                     continue;
                 }
             };
-            last_blank = Self::print_out(&self, output, last_blank, file, &mut index)? 
+            last_blank = Self::print_out(&self, output, last_blank, file, &mut index)?
         }
         Ok(exit_code)
     }
- 
+
     fn help() {
         println!("Concatenate FILE(s) to standard output.");
         println!();
@@ -143,11 +156,9 @@ impl<'a> Command<'a, CatError> for Cat<'a> {
         println!("  cat -E > output.txt       Read stdin, show $ at line ends, write to file");
         println!("  cat file1 - file2         Display file1, then stdin, then file2");
     }
-    
 }
-    
-pub enum CatError{
-}
+
+pub enum CatError {}
 
 impl fmt::Display for CatError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
