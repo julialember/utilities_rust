@@ -63,8 +63,22 @@ impl Rm<'_> {
 impl<'a> Command<'a, RmError> for Rm<'a> {
     fn run(self: Box<Self>, output: &mut CommandBackPack) 
             -> Result<bool, CommandError<'a, RmError>> {
+        let dangerous = [
+            "/", "/*", "/etc", "/bin", "/usr", "/lib", "*", ".", "..",
+            "/var", "/sys", "/proc", "/dev", "/boot",
+        ];
         let mut exit_code = true;
         for arg in self.names {
+            for i in dangerous {
+                if arg.contains(i) {
+                    writeln!(output.stdout, 
+                        "sorry, my creator forbid me to\n\
+                        (delete those dirs/delete it like that)\n\
+                        pls use the system 'rm' for it\n\
+                        or you can edit my code in command_list/rm.rs file! shu!")?;
+                    continue;
+                }
+            }
             if let Err(e) = Self::remove(self.path, arg, self.dir) {
                 match e {
                     RmError::IsDir(_) => {
